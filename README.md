@@ -22,15 +22,38 @@ This portfolio contains implementations of various quantitative finance concepts
 - Conditional Value at Risk (CVaR)
 - Maximum drawdown analysis
 
+### Derivatives Pricing
+- Black-Scholes option pricing model
+- Greeks calculation (Delta, Gamma, Theta, Vega, Rho)
+- Monte Carlo option pricing
+
 ### Trading Strategies
 - High-frequency trading framework
 - Strategy backtesting engine
 - Signal generation systems
+- Machine learning-based signal generation
+
+### Machine Learning
+- Price prediction models (Random Forest, Gradient Boosting, Linear, Ridge)
+- Feature engineering for financial data
+- Technical indicators (RSI, moving averages)
+- Trading signal generation from ML predictions
+
+### Financial Modeling
+- DCF (Discounted Cash Flow) valuation
+- Financial ratios calculation
+- Monte Carlo valuation simulation
+- WACC (Weighted Average Cost of Capital) calculation
 
 ### Data Analysis
+- Comprehensive return analysis
+- Correlation analysis
+- Outlier detection (IQR and Z-score methods)
+- Rolling statistics
+- Stationarity testing (ADF test)
+- Data quality reporting
 - Time series analysis
 - Statistical modeling
-- Financial data processing
 
 ### Technologies
 - Python with pandas, numpy, scipy
