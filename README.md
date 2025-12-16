@@ -43,6 +43,27 @@ This portfolio contains implementations of various quantitative finance concepts
 - Efficient frontier generation
 - Portfolio performance metrics
 
+### Volatility Modeling
+- GARCH(p,q) volatility models
+- EWMA (Exponentially Weighted Moving Average) volatility
+- Realized volatility estimation
+- Volatility forecasting
+- Volatility clustering tests
+
+### Factor Models
+- Fama-French factor models (3-factor, 5-factor)
+- Factor exposure calculation
+- Factor attribution analysis
+- Style analysis with constraints
+
+### Performance Attribution
+- Return decomposition
+- Alpha and beta calculation
+- Information ratio and tracking error
+- Win rate analysis
+- Calmar ratio
+- Rolling performance metrics
+
 ### Machine Learning
 - Price prediction models (Random Forest, Gradient Boosting, Linear, Ridge)
 - Feature engineering for financial data

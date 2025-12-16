@@ -107,6 +107,37 @@ This document tracks all features and implementations added to the quant portfol
   - Half-life of mean reversion
 - **Date Added**: 2025-12-16
 
+### Volatility Modeling
+- **File**: `models/volatility_models.py`
+- **Features**:
+  - GARCH(p,q) volatility estimation
+  - EWMA volatility calculation
+  - Realized volatility
+  - Volatility forecasting
+  - Volatility clustering tests
+- **Date Added**: 2025-12-16
+
+### Factor Models
+- **File**: `models/factor_models.py`
+- **Features**:
+  - Fama-French factor regression (3-factor, 5-factor)
+  - Factor exposure calculation
+  - Factor attribution
+  - Style analysis with constraints
+- **Date Added**: 2025-12-16
+
+### Performance Attribution
+- **File**: `analysis/performance_attribution.py`
+- **Features**:
+  - Performance vs benchmark attribution
+  - Return decomposition
+  - Alpha and beta calculation
+  - Information ratio and tracking error
+  - Win rate analysis
+  - Calmar ratio
+  - Rolling performance metrics
+- **Date Added**: 2025-12-16
+
 ### Examples and Documentation
 - **File**: `examples/portfolio_demo.py`
 - **Features**:
