@@ -138,6 +138,82 @@ This document tracks all features and implementations added to the quant portfol
   - Rolling performance metrics
 - **Date Added**: 2025-12-16
 
+### Advanced Options Pricing
+- **File**: `models/options_pricing.py`
+- **Features**:
+  - Binomial tree option pricing
+  - American option pricing (Monte Carlo with Longstaff-Schwartz)
+  - Implied volatility calculation
+  - Barrier option pricing
+- **Date Added**: 2025-12-16
+
+### Momentum Strategies
+- **File**: `strategies/momentum_strategy.py`
+- **Features**:
+  - Price momentum signals
+  - Cross-sectional momentum
+  - Earnings momentum
+  - RSI momentum
+  - Momentum factor analysis
+- **Date Added**: 2025-12-16
+
+### Risk Budgeting
+- **File**: `analysis/risk_budgeting.py`
+- **Features**:
+  - Risk parity optimization
+  - Risk budget allocation
+  - Kelly Criterion position sizing
+  - Volatility targeting
+  - Risk decomposition
+- **Date Added**: 2025-12-16
+
+### Technical Indicators
+- **File**: `utils/technical_indicators.py`
+- **Features**:
+  - Moving averages (SMA, EMA, WMA)
+  - Bollinger Bands
+  - MACD
+  - Stochastic Oscillator
+  - ATR, ADX
+  - Williams %R, CCI
+  - Fibonacci retracements
+- **Date Added**: 2025-12-16
+
+### Data Processing
+- **File**: `utils/data_processing.py`
+- **Features**:
+  - Financial data cleaning
+  - Winsorization
+  - Normalization methods
+  - Structural break detection
+  - Data alignment utilities
+- **Date Added**: 2025-12-16
+
+### Statistical Analysis
+- **File**: `utils/statistics_.py`
+- **Features**:
+  - Hypothesis testing (t-test, Mann-Whitney)
+  - Normality tests (Shapiro-Wilk, Jarque-Bera, Anderson-Darling)
+  - Correlation tests
+  - Bootstrap confidence intervals
+  - Chi-square tests
+  - Confidence intervals
+- **Date Added**: 2025-12-16
+- **Enhanced**: 2025-12-16
+
+### Quantitative Research
+- **File**: `utils/quantitative_research_.py`
+- **Features**:
+  - Signal-to-noise ratio
+  - Information Coefficient (IC)
+  - Factor analysis (PCA)
+  - Regime detection
+  - Sharpe ratio testing
+  - Research backtesting
+  - Feature importance analysis
+- **Date Added**: 2025-12-16
+- **Enhanced**: 2025-12-16
+
 ### Examples and Documentation
 - **File**: `examples/portfolio_demo.py`
 - **Features**:

@@ -86,6 +86,59 @@ This portfolio contains implementations of various quantitative finance concepts
 - Time series analysis
 - Statistical modeling
 
+### Advanced Options Pricing
+- Binomial tree pricing
+- American option pricing (Longstaff-Schwartz)
+- Implied volatility calculation
+- Barrier option pricing
+
+### Momentum Strategies
+- Price momentum signals
+- Cross-sectional momentum
+- Earnings momentum
+- RSI-based momentum
+- Momentum factor analysis
+
+### Risk Budgeting
+- Risk parity optimization
+- Risk budget allocation
+- Kelly Criterion position sizing
+- Volatility targeting
+- Risk decomposition
+
+### Technical Indicators
+- Moving averages (SMA, EMA, WMA)
+- Bollinger Bands
+- MACD
+- Stochastic Oscillator
+- ATR and ADX
+- Williams %R
+- CCI
+- Fibonacci retracements
+
+### Data Processing
+- Financial data cleaning
+- Winsorization
+- Normalization methods
+- Structural break detection
+- Data alignment utilities
+
+### Statistical Analysis
+- Hypothesis testing (t-test, Mann-Whitney)
+- Normality tests (Shapiro-Wilk, Jarque-Bera)
+- Correlation tests
+- Bootstrap confidence intervals
+- Chi-square tests
+
+### Quantitative Research
+- Signal-to-noise ratio
+- Information Coefficient (IC)
+- Factor analysis (PCA)
+- Regime detection
+- Sharpe ratio testing
+- Research backtesting
+- Feature importance analysis
+
 ### Technologies
 - Python with pandas, numpy, scipy
 - Machine learning (scikit-learn, PyTorch)
