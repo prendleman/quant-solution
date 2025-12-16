@@ -86,6 +86,27 @@ This document tracks all features and implementations added to the quant portfol
 - R language integration
 - Tableau/Power BI utilities
 
+### Portfolio Optimization
+- **File**: `models/portfolio_optimization.py`
+- **Features**:
+  - Mean-variance optimization (Markowitz)
+  - Risk parity portfolio optimization
+  - Minimum variance portfolio
+  - Efficient frontier generation
+  - Portfolio performance metrics calculation
+- **Date Added**: 2025-12-16
+
+### Statistical Arbitrage
+- **File**: `strategies/statistical_arbitrage.py`
+- **Features**:
+  - Pairs trading strategy
+  - Cointegration testing (Engle-Granger)
+  - Mean reversion strategies
+  - Z-score based signal generation
+  - Hedge ratio calculation
+  - Half-life of mean reversion
+- **Date Added**: 2025-12-16
+
 ### Examples and Documentation
 - **File**: `examples/portfolio_demo.py`
 - **Features**:

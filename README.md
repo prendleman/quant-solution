@@ -32,6 +32,16 @@ This portfolio contains implementations of various quantitative finance concepts
 - Strategy backtesting engine
 - Signal generation systems
 - Machine learning-based signal generation
+- Statistical arbitrage (pairs trading, mean reversion)
+- Cointegration testing
+- Hedge ratio calculation
+
+### Portfolio Optimization
+- Mean-variance optimization (Markowitz)
+- Risk parity portfolio
+- Minimum variance portfolio
+- Efficient frontier generation
+- Portfolio performance metrics
 
 ### Machine Learning
 - Price prediction models (Random Forest, Gradient Boosting, Linear, Ridge)
