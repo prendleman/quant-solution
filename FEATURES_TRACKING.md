@@ -39,14 +39,43 @@ This document tracks all features and implementations added to the quant portfol
 ### Financial Modeling
 - **File**: `models/financial_modeling_.py`
 - **Features**:
-  - Financial data processing framework
+  - DCF (Discounted Cash Flow) valuation
+  - Financial ratios calculation
+  - Monte Carlo valuation simulation
+  - WACC (Weighted Average Cost of Capital) calculation
 - **Date Added**: 2025-12-16
+- **Enhanced**: 2025-12-16
 
 ### Data Analysis
 - **File**: `analysis/data_analysis_.py`
 - **Features**:
-  - Data analysis utilities
+  - Comprehensive return analysis
+  - Correlation analysis
+  - Outlier detection (IQR and Z-score methods)
+  - Rolling statistics
+  - Stationarity testing (ADF test)
+  - Data quality reporting
 - **Date Added**: 2025-12-16
+- **Enhanced**: 2025-12-16
+
+### Derivatives Pricing
+- **File**: `utils/derivatives_.py`
+- **Features**:
+  - Black-Scholes option pricing
+  - Greeks calculation (Delta, Gamma, Theta, Vega, Rho)
+  - Monte Carlo option pricing
+- **Date Added**: 2025-12-16
+- **Enhanced**: 2025-12-16
+
+### Machine Learning
+- **File**: `utils/machine_learning_.py`
+- **Features**:
+  - Feature engineering for price prediction
+  - RSI (Relative Strength Index) calculation
+  - ML model training (Random Forest, Gradient Boosting, Linear, Ridge)
+  - Trading signal generation from ML predictions
+- **Date Added**: 2025-12-16
+- **Enhanced**: 2025-12-16
 
 ### Technology Implementations
 - Python utilities
@@ -56,6 +85,13 @@ This document tracks all features and implementations added to the quant portfol
 - Spark processing
 - R language integration
 - Tableau/Power BI utilities
+
+### Examples and Documentation
+- **File**: `examples/portfolio_demo.py`
+- **Features**:
+  - Comprehensive demonstration script
+  - Usage examples for all major modules
+- **Date Added**: 2025-12-16
 
 ## Technologies Demonstrated
 
