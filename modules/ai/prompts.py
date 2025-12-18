@@ -127,3 +127,43 @@ Respond concisely based on the type of question:
 {}
 """
 #<
+
+##> Generate Cover Letter
+# Structure of messages = `[{"role": "user", "content": generate_cover_letter_prompt}]`
+
+generate_cover_letter_prompt = """
+You are an expert cover letter writer. Your task is to write a professional, compelling cover letter tailored to a specific job application.
+
+**Instructions:**
+1. Write a professional cover letter that is personalized to the job description and company.
+2. Highlight the candidate's relevant skills, experience, and achievements that match the job requirements.
+3. Keep the cover letter concise but impactful (approximately 300-500 words).
+4. Use a professional tone that is enthusiastic but not overly casual.
+5. Structure the cover letter with:
+   - A strong opening paragraph that expresses interest in the position
+   - 1-2 body paragraphs that connect the candidate's experience to the job requirements
+   - A closing paragraph that reiterates interest and includes a call to action
+6. Do NOT include placeholders like [Your Name] or [Company Name] - write as if the candidate is writing directly.
+7. Focus on specific skills and experiences mentioned in the user information that align with the job requirements.
+
+**User Information (Candidate's Background):**
+{}
+
+**Job Description:**
+{}
+
+**About the Company:**
+{}
+
+**Required Skills:**
+{}
+
+**Nice-to-Have Skills:**
+{}
+
+Write the cover letter now:
+"""
+"""
+Use `generate_cover_letter_prompt.format(user_information, job_description, about_company, required_skills_str, nice_to_have_str)` to insert the parameters.
+"""
+#<

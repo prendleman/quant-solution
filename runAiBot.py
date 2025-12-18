@@ -13,14 +13,36 @@ version:    24.12.29.12.30
 '''
 
 
-# Imports
+# Fix Windows console encoding issues
+import sys
 import os
+
+# Set UTF-8 encoding for stdout and stderr on Windows
+if sys.platform == 'win32':
+    try:
+        # Try to set the console code page to UTF-8
+        os.system('chcp 65001 >nul 2>&1')
+    except:
+        pass
+    
+    # Reconfigure stdout and stderr to use UTF-8
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except AttributeError:
+        # Python < 3.7 fallback
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'replace')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'replace')
+
+# Imports
 import csv
 import re
 import pyautogui
+from modules.safe_pyautogui import alert as safe_alert, confirm as safe_confirm
 
 # Set CSV field size limit to prevent field size errors
-csv.field_size_limit(1000000)  # Set to 1MB instead of default 131KB
+csv.field_size_limit(10000000)  # Set to 10MB instead of default 131KB to handle large job descriptions
 
 from random import choice, shuffle, randint
 from datetime import datetime
@@ -35,16 +57,17 @@ from selenium.common.exceptions import NoSuchElementException, ElementClickInter
 from config.personals import *
 from config.questions import *
 from config.search import *
-from config.secrets import use_AI, username, password, ai_provider
+from config.secrets import use_AI, username, password, ai_provider, github_token
 from config.settings import *
 
 from modules.open_chrome import *
 from modules.helpers import *
 from modules.clickers_and_finders import *
 from modules.validator import validate_config
-from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_close_openai_client
+from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_generate_coverletter, ai_close_openai_client
 from modules.ai.deepseekConnections import deepseek_create_client, deepseek_extract_skills, deepseek_answer_question
 from modules.ai.geminiConnections import gemini_create_client, gemini_extract_skills, gemini_answer_question
+from modules.git_integration import analyze_jd_requirements, identify_repo_gaps, generate_poc_improvements, commit_to_poc_repo
 
 from typing import Literal
 
@@ -154,20 +177,32 @@ def login_LN() -> None:
 
 
 
-def get_applied_job_ids() -> set:
+def get_cataloged_job_ids() -> set:
     '''
-    Function to get a `set` of applied job's Job IDs
-    * Returns a set of Job IDs from existing applied jobs history csv file
+    Function to get a `set` of cataloged job's Job IDs
+    * Returns a set of Job IDs from existing jobs catalog csv file
     '''
     job_ids = set()
     try:
-        with open(file_name, 'r', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            for row in reader:
-                job_ids.add(row[0])
+        if os.path.exists(jobs_catalog_file):
+            with open(jobs_catalog_file, 'r', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    if row and row.get('Job ID'):
+                        job_ids.add(row['Job ID'])
     except FileNotFoundError:
-        print_lg(f"The CSV file '{file_name}' does not exist.")
+        print_lg(f"The CSV file '{jobs_catalog_file}' does not exist.")
+    except Exception as e:
+        print_lg(f"Error reading cataloged jobs: {e}")
     return job_ids
+
+
+# Legacy function for backward compatibility
+def get_applied_job_ids() -> set:
+    '''
+    Legacy function - redirects to get_cataloged_job_ids for cataloging purposes.
+    '''
+    return get_cataloged_job_ids()
 
 
 
@@ -242,7 +277,7 @@ def apply_filters() -> None:
         show_results_button.click()
 
         global pause_after_filters
-        if pause_after_filters and "Turn off Pause after search" == pyautogui.confirm("These are your configured search results and filter. It is safe to change them while this dialog is open, any changes later could result in errors and skipping this search run.", "Please check your results", ["Turn off Pause after search", "Look's good, Continue"]):
+        if pause_after_filters and "Turn off Pause after search" == safe_confirm("These are your configured search results and filter. It is safe to change them while this dialog is open, any changes later could result in errors and skipping this search run.", "Please check your results", ["Turn off Pause after search", "Look's good, Continue"]):
             pause_after_filters = False
 
     except Exception as e:
@@ -268,6 +303,130 @@ def get_page_info() -> tuple[WebElement | None, int | None]:
 
 
 
+def should_skip_job_by_location(work_location: str, work_style: str, title: str, company: str, job_id: str) -> bool:
+    '''
+    Function to determine if a job should be skipped based on location requirements.
+    Returns True if job should be skipped, False if job should be applied to.
+    
+    Rules:
+    - Remote jobs: Accept from anywhere (all locations)
+    - Chicago area jobs: Accept all (on-site, remote, hybrid)
+    - Outside Chicago: Only accept remote (skip on-site and hybrid)
+    '''
+    # Check if location is in Chicago area
+    chicago_indicators = ["Chicago", "IL", "Illinois", "chicago", "illinois"]
+    location_lower = work_location.lower() if work_location else ""
+    
+    is_chicago = False
+    for indicator in chicago_indicators:
+        if indicator.lower() in location_lower:
+            is_chicago = True
+            break
+    
+    # If it's a Remote job, always accept (regardless of location)
+    if work_style and "Remote" in work_style:
+        return False  # Don't skip - remote jobs accepted everywhere
+    
+    # If it's in Chicago area, accept all work styles (on-site, hybrid, remote)
+    if is_chicago:
+        return False  # Don't skip - all Chicago area jobs accepted
+    
+    # If it's On-site or Hybrid outside Chicago, skip it
+    if work_style and ("On-site" in work_style or "Hybrid" in work_style):
+        print_lg(f'Skipping "{title} | {company}" job ({work_style} but not in Chicago area: {work_location}). Job ID: {job_id}!')
+        return True
+    
+    # If work style is unknown, be conservative and accept
+    return False
+
+
+def extract_salary_from_job_listing(job: WebElement) -> float:
+    '''
+    Extract salary information from job listing element.
+    Returns salary as float (highest value if range), or 0.0 if not found.
+    '''
+    try:
+        # Try to find salary information in the job listing
+        salary_text = ""
+        
+        # Try multiple selectors for salary in listing
+        salary_selectors = [
+            './/span[contains(text(), "$")]',
+            './/span[contains(text(), "k")]',
+            './/span[contains(@class, "salary")]',
+            './/div[contains(@class, "salary")]',
+            './/span[contains(@class, "job-card-container__metadata-item")]',
+            './/li[contains(@class, "job-card-container__metadata-item")]',
+        ]
+        
+        for selector in salary_selectors:
+            try:
+                salary_elements = job.find_elements(By.XPATH, selector)
+                for elem in salary_elements:
+                    text = elem.text.strip()
+                    if '$' in text or ('k' in text.lower() and any(c.isdigit() for c in text)) or 'salary' in text.lower():
+                        salary_text = text
+                        break
+                if salary_text:
+                    break
+            except:
+                continue
+        
+        # If not found in listing, try to extract from job details panel (if visible)
+        if not salary_text:
+            try:
+                # Check if job details panel is visible and contains salary
+                salary_panel_selectors = [
+                    '//div[contains(@class, "jobs-box__html-content")]//span[contains(text(), "$")]',
+                    '//div[contains(@class, "jobs-details-top-card")]//span[contains(text(), "$")]',
+                    '//div[contains(@class, "jobs-details")]//span[contains(text(), "$")]',
+                ]
+                for selector in salary_panel_selectors:
+                    try:
+                        salary_elements = driver.find_elements(By.XPATH, selector)
+                        for elem in salary_elements:
+                            text = elem.text.strip()
+                            if '$' in text and any(c.isdigit() for c in text):
+                                salary_text = text
+                                break
+                        if salary_text:
+                            break
+                    except:
+                        continue
+            except:
+                pass
+        
+        if not salary_text:
+            return 0.0
+        
+        # Extract numeric value from salary text
+        import re
+        # Remove commas and extract numbers
+        numbers = re.findall(r'[\d,]+', salary_text.replace(',', ''))
+        if not numbers:
+            return 0.0
+        
+        # Get the highest number (for ranges like "$100k - $150k" or "$100,000 - $150,000")
+        max_salary = 0.0
+        for num_str in numbers:
+            try:
+                num = float(num_str.replace(',', ''))
+                # Handle 'k' suffix (thousands) - if number is less than 1000 and text has 'k'
+                if 'k' in salary_text.lower() and num < 1000:
+                    num = num * 1000
+                # If number seems too small for salary (less than 10k), might be in thousands already
+                elif num < 10000 and 'k' in salary_text.lower():
+                    num = num * 1000
+                max_salary = max(max_salary, num)
+            except:
+                continue
+        
+        return max_salary
+        
+    except Exception as e:
+        return 0.0
+
+
 def get_job_main_details(job: WebElement, blacklisted_companies: set, rejected_jobs: set) -> tuple[str, str, str, str, str, bool]:
     '''
     # Function to get job main details.
@@ -279,19 +438,64 @@ def get_job_main_details(job: WebElement, blacklisted_companies: set, rejected_j
     * work_style: Work style of this job (Remote, On-site, Hybrid)
     * skip: A boolean flag to skip this job
     '''
-    job_details_button = job.find_element(By.TAG_NAME, 'a')  # job.find_element(By.CLASS_NAME, "job-card-list__title")  # Problem in India
-    scroll_to_view(driver, job_details_button, True)
-    job_id = job.get_dom_attribute('data-occludable-job-id')
-    title = job_details_button.text
-    title = title[:title.find("\n")]
-    # company = job.find_element(By.CLASS_NAME, "job-card-container__primary-description").text
-    # work_location = job.find_element(By.CLASS_NAME, "job-card-container__metadata-item").text
-    other_details = job.find_element(By.CLASS_NAME, 'artdeco-entity-lockup__subtitle').text
-    index = other_details.find(' · ')
-    company = other_details[:index]
-    work_location = other_details[index+3:]
-    work_style = work_location[work_location.rfind('(')+1:work_location.rfind(')')]
-    work_location = work_location[:work_location.rfind('(')].strip()
+    try:
+        # Try multiple ways to find the job details button
+        job_details_button = None
+        try:
+            job_details_button = job.find_element(By.TAG_NAME, 'a')
+        except:
+            try:
+                job_details_button = job.find_element(By.CLASS_NAME, "job-card-list__title")
+            except:
+                try:
+                    job_details_button = job.find_element(By.CSS_SELECTOR, "a[data-control-id]")
+                except:
+                    pass
+        
+        if not job_details_button:
+            print_lg("Could not find job details button")
+            return ("unknown", "Unknown Job", "Unknown Company", "Unknown Location", "Unknown", True)
+            
+        scroll_to_view(driver, job_details_button, True)
+        job_id = job.get_dom_attribute('data-occludable-job-id')
+        title = job_details_button.text
+        title = title[:title.find("\n")] if "\n" in title else title
+        
+        # Try multiple possible class names for job details
+        other_details = ""
+        try:
+            other_details = job.find_element(By.CLASS_NAME, 'artdeco-entity-lockup__subtitle').text
+        except:
+            try:
+                other_details = job.find_element(By.CLASS_NAME, 'job-card-container__primary-description').text
+            except:
+                try:
+                    other_details = job.find_element(By.CLASS_NAME, 'job-card-container__metadata-item').text
+                except:
+                    try:
+                        other_details = job.find_element(By.CLASS_NAME, 'job-card-container__secondary-description').text
+                    except:
+                        try:
+                            other_details = job.find_element(By.CSS_SELECTOR, '[class*="job-card-container"] [class*="description"]').text
+                        except:
+                            other_details = "Unknown Company · Unknown Location"
+        
+        if ' · ' in other_details:
+            index = other_details.find(' · ')
+            company = other_details[:index]
+            work_location = other_details[index+3:]
+            if '(' in work_location and ')' in work_location:
+                work_style = work_location[work_location.rfind('(')+1:work_location.rfind(')')]
+                work_location = work_location[:work_location.rfind('(')].strip()
+            else:
+                work_style = "Unknown"
+        else:
+            company = other_details
+            work_location = "Unknown"
+            work_style = "Unknown"
+    except Exception as e:
+        print_lg(f"Failed to extract job details: {e}")
+        return ("unknown", "Unknown Job", "Unknown Company", "Unknown Location", "Unknown", True)
     
     # Skip if previously rejected due to blacklist or already applied
     skip = False
@@ -301,6 +505,10 @@ def get_job_main_details(job: WebElement, blacklisted_companies: set, rejected_j
     elif job_id in rejected_jobs: 
         print_lg(f'Skipping previously rejected "{title} | {company}" job. Job ID: {job_id}!')
         skip = True
+    
+    # Chicago location filtering logic
+    if not skip:
+        skip = should_skip_job_by_location(work_location, work_style, title, company, job_id)
     try:
         if job.find_element(By.CLASS_NAME, "job-card-container__footer-job-state").text == "Applied":
             skip = True
@@ -318,7 +526,7 @@ def get_job_main_details(job: WebElement, blacklisted_companies: set, rejected_j
 
 
 # Function to check for Blacklisted words in About Company
-def check_blacklist(rejected_jobs: set, job_id: str, company: str, blacklisted_companies: set) -> tuple[set, set, WebElement] | ValueError:
+def check_blacklist(rejected_jobs: set, job_id: str, company: str, blacklisted_companies: set) -> tuple[set, set, WebElement, str] | ValueError:
     jobs_top_card = try_find_by_classes(driver, ["job-details-jobs-unified-top-card__primary-description-container","job-details-jobs-unified-top-card__primary-description","jobs-unified-top-card__primary-description","jobs-details__main-content"])
     about_company_org = find_by_class(driver, "jobs-company__box")
     scroll_to_view(driver, about_company_org)
@@ -338,7 +546,7 @@ def check_blacklist(rejected_jobs: set, job_id: str, company: str, blacklisted_c
                 raise ValueError(f'\n"{about_company_org}"\n\nContains "{word}".')
     buffer(click_gap)
     scroll_to_view(driver, jobs_top_card)
-    return rejected_jobs, blacklisted_companies, jobs_top_card
+    return rejected_jobs, blacklisted_companies, jobs_top_card, about_company_org
 
 
 
@@ -407,8 +615,7 @@ def get_job_description(
             experience_required = "Error in extraction"
             print_lg("Unable to extract years of experience required!")
             # print_lg(e)
-    finally:
-        return jobDescription, experience_required, skip, skipReason, skipMessage
+    return jobDescription, experience_required, skip, skipReason, skipMessage
         
 
 
@@ -420,13 +627,39 @@ def upload_resume(modal: WebElement, resume: str) -> tuple[bool, str]:
     except: return False, "Previous resume"
 
 # Function to answer common questions for Easy Apply
+def get_enhanced_user_information() -> str:
+    '''
+    Get user information with portfolio repository URL appended.
+    Returns enhanced user_information_all string with portfolio URL if available.
+    '''
+    enhanced_info = user_information_all if user_information_all else ""
+    
+    # Add portfolio repo URL if available
+    if quant_poc_repo_remote:
+        repo_url = quant_poc_repo_remote
+        # Remove authentication token if present
+        if '@' in repo_url:
+            repo_url = repo_url.split('@')[-1]
+        # Remove .git extension if present
+        if repo_url.endswith('.git'):
+            repo_url = repo_url[:-4]
+        # Ensure https:// format
+        if not repo_url.startswith('http'):
+            repo_url = 'https://' + repo_url.lstrip('/')
+        
+        portfolio_section = f"\n\nPortfolio Repository: {repo_url}"
+        enhanced_info = enhanced_info + portfolio_section if enhanced_info else portfolio_section
+    
+    return enhanced_info
+
+
 def answer_common_questions(label: str, answer: str) -> str:
     if 'sponsorship' in label or 'visa' in label: answer = require_visa
     return answer
 
 
 # Function to answer the questions for Easy Apply
-def answer_questions(modal: WebElement, questions_list: set, work_location: str, job_description: str | None = None ) -> set:
+def answer_questions(modal: WebElement, questions_list: set, work_location: str, job_description: str | None = None, about_company: str | None = None, required_skills: dict | None = None) -> set:
     # Get all questions from the page
      
     all_questions = modal.find_elements(By.XPATH, ".//div[@data-test-form-element]")
@@ -546,6 +779,10 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 if foundOption: 
                     actions.move_to_element(foundOption).click().perform()
                 else:    
+                    if not options or not options_labels:
+                        print_lg(f'No options found for radio question "{label_org}". Skipping this question.')
+                        randomly_answered_questions.add((f'{label_org} ]',"radio"))
+                        continue
                     possible_answer_phrases = ["Decline", "not wish", "don't wish", "Prefer not", "not want"] if answer == 'Decline' else [answer]
                     ele = options[0]
                     answer = options_labels[0]
@@ -627,27 +864,49 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 elif 'state' in label or 'province' in label: answer = state
                 elif 'zip' in label or 'postal' in label or 'code' in label: answer = zipcode
                 elif 'country' in label: answer = country
+                # College/Education related questions
+                elif 'college' in label or 'university' in label or 'school' in label:
+                    if 'name' in label or 'institution' in label: answer = college_name
+                    elif 'start' in label or 'begin' in label: answer = college_start_date
+                    elif 'end' in label or 'graduation' in label or 'graduate' in label: answer = college_end_date
+                    elif 'degree' in label: answer = college_degree
+                    elif 'major' in label or 'field' in label or 'study' in label: answer = college_major
+                    else: answer = college_name
+                elif 'education' in label or 'degree' in label:
+                    if 'start' in label or 'begin' in label: answer = college_start_date
+                    elif 'end' in label or 'graduation' in label or 'graduate' in label: answer = college_end_date
+                    elif 'institution' in label or 'school' in label: answer = college_name
+                    elif 'major' in label or 'field' in label or 'study' in label: answer = college_major
+                    else: answer = college_degree
+                elif 'graduation' in label or 'graduate' in label:
+                    if 'date' in label or 'year' in label: answer = college_end_date
+                    elif 'school' in label or 'college' in label or 'university' in label: answer = college_name
+                    else: answer = college_end_date
                 else: answer = answer_common_questions(label,answer)
                 ##> ------ Yang Li : MARKYangL - Feature ------
                 if answer == "":
                     if use_AI and aiClient:
                         try:
+                            ai_answer = None
+                            enhanced_user_info = get_enhanced_user_information()
                             if ai_provider.lower() == "openai":
-                                answer = ai_answer_question(aiClient, label_org, question_type="text", job_description=job_description, user_information_all=user_information_all)
+                                ai_answer = ai_answer_question(aiClient, label_org, question_type="text", job_description=job_description, user_information_all=enhanced_user_info)
                             elif ai_provider.lower() == "deepseek":
-                                answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="text", job_description=job_description, about_company=None, user_information_all=user_information_all)
+                                ai_answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="text", job_description=job_description, about_company=None, user_information_all=enhanced_user_info)
                             elif ai_provider.lower() == "gemini":
-                                answer = gemini_answer_question(aiClient, label_org, options=None, question_type="text", job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            else:
-                                randomly_answered_questions.add((label_org, "text"))
-                                answer = years_of_experience
-                            if answer and isinstance(answer, str) and len(answer) > 0:
+                                ai_answer = gemini_answer_question(aiClient, label_org, options=None, question_type="text", job_description=job_description, about_company=None, user_information_all=enhanced_user_info)
+                            
+                            # Check if AI returned a valid answer
+                            if ai_answer and isinstance(ai_answer, str) and len(ai_answer) > 0:
+                                answer = ai_answer
                                 print_lg(f'AI Answered received for question "{label_org}" \nhere is answer: "{answer}"')
                             else:
+                                # AI failed or returned empty - use fallback
                                 randomly_answered_questions.add((label_org, "text"))
                                 answer = years_of_experience
                         except Exception as e:
-                            print_lg("Failed to get AI answer!", e)
+                            # Gracefully handle AI errors - use fallback answer
+                            print_lg(f"Failed to get AI answer (using fallback): {e}")
                             randomly_answered_questions.add((label_org, "text"))
                             answer = years_of_experience
                     else:
@@ -673,27 +932,63 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
             prev_answer = text_area.get_attribute("value")
             if not prev_answer or overwrite_previous_answers:
                 if 'summary' in label: answer = linkedin_summary
-                elif 'cover' in label: answer = cover_letter
+                elif 'cover' in label:
+                    # Use AI to generate dynamic cover letter if AI is enabled and we have the necessary info
+                    if use_AI and aiClient and job_description and job_description != "Unknown":
+                        try:
+                            print_lg("Detected cover letter question - generating dynamic cover letter using AI...")
+                            enhanced_user_info = get_enhanced_user_information()
+                            if ai_provider.lower() == "openai":
+                                generated_cover_letter = ai_generate_coverletter(
+                                    aiClient, 
+                                    job_description, 
+                                    about_company if about_company else "Unknown",
+                                    required_skills if required_skills and isinstance(required_skills, dict) else {},
+                                    user_information_all=enhanced_user_info
+                                )
+                                if generated_cover_letter and isinstance(generated_cover_letter, str) and len(generated_cover_letter) > 0:
+                                    answer = generated_cover_letter
+                                    print_lg(f'AI Generated cover letter for question "{label_org}"')
+                                else:
+                                    # Fallback to static cover letter if AI generation fails
+                                    answer = cover_letter
+                                    print_lg("AI cover letter generation returned empty, using static cover letter")
+                            else:
+                                # For other AI providers, use static cover letter for now
+                                # TODO: Implement cover letter generation for DeepSeek and Gemini
+                                answer = cover_letter
+                                print_lg(f"Cover letter generation for {ai_provider} not yet implemented, using static cover letter")
+                        except Exception as e:
+                            # Fallback to static cover letter on error
+                            print_lg(f"Failed to generate AI cover letter (using static): {e}")
+                            answer = cover_letter
+                    else:
+                        # Use static cover letter if AI is not enabled or info is missing
+                        answer = cover_letter
                 if answer == "":
                 ##> ------ Yang Li : MARKYangL - Feature ------
                     if use_AI and aiClient:
                         try:
+                            ai_answer = None
+                            enhanced_user_info = get_enhanced_user_information()
                             if ai_provider.lower() == "openai":
-                                answer = ai_answer_question(aiClient, label_org, question_type="textarea", job_description=job_description, user_information_all=user_information_all)
+                                ai_answer = ai_answer_question(aiClient, label_org, question_type="textarea", job_description=job_description, user_information_all=enhanced_user_info)
                             elif ai_provider.lower() == "deepseek":
-                                answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=user_information_all)
+                                ai_answer = deepseek_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=enhanced_user_info)
                             elif ai_provider.lower() == "gemini":
-                                answer = gemini_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=user_information_all)
-                            else:
-                                randomly_answered_questions.add((label_org, "textarea"))
-                                answer = ""
-                            if answer and isinstance(answer, str) and len(answer) > 0:
+                                ai_answer = gemini_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=enhanced_user_info)
+                            
+                            # Check if AI returned a valid answer
+                            if ai_answer and isinstance(ai_answer, str) and len(ai_answer) > 0:
+                                answer = ai_answer
                                 print_lg(f'AI Answered received for question "{label_org}" \nhere is answer: "{answer}"')
                             else:
+                                # AI failed or returned empty - use fallback
                                 randomly_answered_questions.add((label_org, "textarea"))
                                 answer = ""
                         except Exception as e:
-                            print_lg("Failed to get AI answer!", e)
+                            # Gracefully handle AI errors - use fallback answer
+                            print_lg(f"Failed to get AI answer (using fallback): {e}")
                             randomly_answered_questions.add((label_org, "textarea"))
                             answer = ""
                     else:
@@ -800,7 +1095,7 @@ def failed_job(job_id: str, job_link: str, resume: str, date_listed, error: str,
             file.close()
     except Exception as e:
         print_lg("Failed to update failed jobs list!", e)
-        pyautogui.alert("Failed to update the excel of failed jobs!\nProbably because of 1 of the following reasons:\n1. The file is currently open or in use by another program\n2. Permission denied to write to the file\n3. Failed to find the file", "Failed Logging")
+        safe_alert("Failed to update the excel of failed jobs!\nProbably because of 1 of the following reasons:\n1. The file is currently open or in use by another program\n2. Permission denied to write to the file\n3. Failed to find the file", "Failed Logging")
 
 
 def screenshot(driver: WebDriver, job_id: str, failedAt: str) -> str:
@@ -818,28 +1113,465 @@ def screenshot(driver: WebDriver, job_id: str, failedAt: str) -> str:
 
 
 
-def submitted_jobs(job_id: str, title: str, company: str, work_location: str, work_style: str, description: str, experience_required: int | Literal['Unknown', 'Error in extraction'], 
-                   skills: list[str] | Literal['In Development'], hr_name: str | Literal['Unknown'], hr_link: str | Literal['Unknown'], resume: str, 
-                   reposted: bool, date_listed: datetime | Literal['Unknown'], date_applied:  datetime | Literal['Pending'], job_link: str, application_link: str, 
-                   questions_list: set | None, connect_request: Literal['In Development']) -> None:
+def catalog_job(job_id: str, title: str, company: str, work_location: str, work_style: str, description: str, 
+                experience_required: int | Literal['Unknown', 'Error in extraction'], 
+                skills: list[str] | Literal['In Development'], hr_name: str | Literal['Unknown'], 
+                hr_link: str | Literal['Unknown'], reposted: bool, date_listed: datetime | Literal['Unknown'], 
+                job_link: str, connection_status: str = "Not Connected", connection_date: str = "") -> None:
     '''
-    Function to create or update the Applied jobs CSV file, once the application is submitted successfully
+    Function to catalog job information to CSV file for quant job search tracking.
     '''
     try:
-        with open(file_name, mode='a', newline='', encoding='utf-8') as csv_file:
-            fieldnames = ['Job ID', 'Title', 'Company', 'Work Location', 'Work Style', 'About Job', 'Experience required', 'Skills required', 'HR Name', 'HR Link', 'Resume', 'Re-posted', 'Date Posted', 'Date Applied', 'Job Link', 'External Job link', 'Questions Found', 'Connect Request']
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(jobs_catalog_file), exist_ok=True)
+        
+        with open(jobs_catalog_file, mode='a', newline='', encoding='utf-8') as csv_file:
+            fieldnames = ['Job ID', 'Title', 'Company', 'Work Location', 'Work Style', 'Job Description', 
+                         'Experience required', 'Skills required', 'Recruiter Name', 'Recruiter Link', 
+                         'Recruiter Title', 'Recruiter Company', 'Date Posted', 'Job Link', 
+                         'Connection Status', 'Connection Date']
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             if csv_file.tell() == 0: writer.writeheader()
-            writer.writerow({'Job ID':truncate_for_csv(job_id), 'Title':truncate_for_csv(title), 'Company':truncate_for_csv(company), 'Work Location':truncate_for_csv(work_location), 'Work Style':truncate_for_csv(work_style), 
-                            'About Job':truncate_for_csv(description), 'Experience required': truncate_for_csv(experience_required), 'Skills required':truncate_for_csv(skills), 
-                                'HR Name':truncate_for_csv(hr_name), 'HR Link':truncate_for_csv(hr_link), 'Resume':truncate_for_csv(resume), 'Re-posted':truncate_for_csv(reposted), 
-                                'Date Posted':truncate_for_csv(date_listed), 'Date Applied':truncate_for_csv(date_applied), 'Job Link':truncate_for_csv(job_link), 
-                                'External Job link':truncate_for_csv(application_link), 'Questions Found':truncate_for_csv(questions_list), 'Connect Request':truncate_for_csv(connect_request)})
+            writer.writerow({
+                'Job ID': truncate_for_csv(job_id), 
+                'Title': truncate_for_csv(title), 
+                'Company': truncate_for_csv(company), 
+                'Work Location': truncate_for_csv(work_location), 
+                'Work Style': truncate_for_csv(work_style), 
+                'Job Description': truncate_for_csv(description), 
+                'Experience required': truncate_for_csv(experience_required), 
+                'Skills required': truncate_for_csv(skills), 
+                'Recruiter Name': truncate_for_csv(hr_name), 
+                'Recruiter Link': truncate_for_csv(hr_link), 
+                'Recruiter Title': truncate_for_csv(""),  # Will be populated by catalog_recruiter
+                'Recruiter Company': truncate_for_csv(""),  # Will be populated by catalog_recruiter
+                'Date Posted': truncate_for_csv(date_listed), 
+                'Job Link': truncate_for_csv(job_link), 
+                'Connection Status': truncate_for_csv(connection_status),
+                'Connection Date': truncate_for_csv(connection_date)
+            })
         csv_file.close()
     except Exception as e:
-        print_lg("Failed to update submitted jobs list!", e)
-        pyautogui.alert("Failed to update the excel of applied jobs!\nProbably because of 1 of the following reasons:\n1. The file is currently open or in use by another program\n2. Permission denied to write to the file\n3. Failed to find the file", "Failed Logging")
+        print_lg("Failed to catalog job!", e)
+        safe_alert("Failed to update the jobs catalog!\nProbably because of 1 of the following reasons:\n1. The file is currently open or in use by another program\n2. Permission denied to write to the file\n3. Failed to find the file", "Failed Logging")
 
+
+def catalog_recruiter(recruiter_name: str, recruiter_link: str, recruiter_title: str = "", 
+                      recruiter_company: str = "", job_id: str = "", connection_status: str = "Not Connected",
+                      first_contact_date: str = "", last_message_date: str = "", notes: str = "") -> None:
+    '''
+    Function to catalog recruiter information to CSV file.
+    Updates existing entry if recruiter already exists, otherwise creates new entry.
+    '''
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(recruiters_catalog_file), exist_ok=True)
+        
+        # Read existing recruiters
+        recruiters = {}
+        fieldnames = ['Recruiter Name', 'Recruiter Link', 'Recruiter Title', 'Recruiter Company', 
+                     'Jobs Posted', 'First Contact Date', 'Connection Status', 'Last Message Date', 'Notes']
+        
+        if os.path.exists(recruiters_catalog_file):
+            try:
+                with open(recruiters_catalog_file, 'r', encoding='utf-8') as file:
+                    reader = csv.DictReader(file)
+                    for row in reader:
+                        if row.get('Recruiter Link'):
+                            recruiters[row['Recruiter Link']] = row
+            except Exception as e:
+                print_lg(f"Error reading existing recruiters file: {e}")
+        
+        # Update or create recruiter entry
+        if recruiter_link in recruiters:
+            # Update existing entry
+            existing = recruiters[recruiter_link]
+            # Update jobs posted list
+            jobs_posted = existing.get('Jobs Posted', '')
+            if job_id and job_id not in jobs_posted:
+                jobs_posted = f"{jobs_posted},{job_id}" if jobs_posted else job_id
+            existing['Jobs Posted'] = jobs_posted
+            # Update other fields if provided
+            if recruiter_title: existing['Recruiter Title'] = recruiter_title
+            if recruiter_company: existing['Recruiter Company'] = recruiter_company
+            if connection_status: existing['Connection Status'] = connection_status
+            if first_contact_date: existing['First Contact Date'] = first_contact_date
+            if last_message_date: existing['Last Message Date'] = last_message_date
+            if notes: existing['Notes'] = notes
+        else:
+            # Create new entry
+            recruiters[recruiter_link] = {
+                'Recruiter Name': recruiter_name,
+                'Recruiter Link': recruiter_link,
+                'Recruiter Title': recruiter_title,
+                'Recruiter Company': recruiter_company,
+                'Jobs Posted': job_id,
+                'First Contact Date': first_contact_date,
+                'Connection Status': connection_status,
+                'Last Message Date': last_message_date,
+                'Notes': notes
+            }
+        
+        # Write all recruiters back to file
+        with open(recruiters_catalog_file, 'w', newline='', encoding='utf-8') as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writeheader()
+            for recruiter in recruiters.values():
+                writer.writerow({k: truncate_for_csv(v) for k, v in recruiter.items()})
+        csv_file.close()
+    except Exception as e:
+        print_lg("Failed to catalog recruiter!", e)
+        safe_alert("Failed to update the recruiters catalog!\nProbably because of 1 of the following reasons:\n1. The file is currently open or in use by another program\n2. Permission denied to write to the file\n3. Failed to find the file", "Failed Logging")
+
+
+# Legacy function for backward compatibility
+def submitted_jobs(job_id: str, title: str, company: str, work_location: str, work_style: str, description: str, 
+                   experience_required: int | Literal['Unknown', 'Error in extraction'], 
+                   skills: list[str] | Literal['In Development'], hr_name: str | Literal['Unknown'], 
+                   hr_link: str | Literal['Unknown'], resume: str, reposted: bool, 
+                   date_listed: datetime | Literal['Unknown'], date_applied: datetime | Literal['Pending'], 
+                   job_link: str, application_link: str, questions_list: set | None, 
+                   connect_request: Literal['In Development']) -> None:
+    '''
+    Legacy function - redirects to catalog_job for cataloging purposes.
+    '''
+    catalog_job(job_id, title, company, work_location, work_style, description, experience_required, 
+                skills, hr_name, hr_link, reposted, date_listed, job_link)
+
+
+
+def connect_with_recruiter(hr_link: str, hr_name: str, message_template: str = "") -> tuple[bool, str]:
+    '''
+    Sends a LinkedIn connection request to a recruiter.
+    Returns (success: bool, status_message: str)
+    '''
+    if not connect_with_recruiters:
+        return False, "Connection requests disabled in settings"
+    
+    if not hr_link or hr_link == "Unknown":
+        return False, "No recruiter link available"
+    
+    try:
+        # Store current window
+        original_window = driver.current_window_handle
+        
+        # Open recruiter profile in new tab
+        driver.execute_script(f"window.open('{hr_link}', '_blank');")
+        driver.switch_to.window(driver.window_handles[-1])
+        buffer(2)
+        
+        # Check if already connected
+        try:
+            if try_xp(driver, ".//span[contains(text(), 'Connected')]", 2):
+                driver.close()
+                driver.switch_to.window(original_window)
+                return True, "Already connected"
+        except:
+            pass
+        
+        # Check if connection request already sent
+        try:
+            if try_xp(driver, ".//span[contains(text(), 'Pending')]", 2):
+                driver.close()
+                driver.switch_to.window(original_window)
+                return True, "Connection request already pending"
+        except:
+            pass
+        
+        # Find and click Connect button
+        connect_button = None
+        try:
+            # Try to find Connect button
+            connect_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, ".//button[contains(@aria-label, 'Connect') or contains(span, 'Connect')]"))
+            )
+        except:
+            try:
+                # Alternative: look for More button then Connect
+                more_button = try_xp(driver, ".//button[contains(@aria-label, 'More')]", 2)
+                if more_button:
+                    more_button.click()
+                    buffer(1)
+                    connect_button = try_xp(driver, ".//button[contains(span, 'Connect')]", 2)
+            except:
+                pass
+        
+        if not connect_button:
+            driver.close()
+            driver.switch_to.window(original_window)
+            return False, "Could not find Connect button"
+        
+        scroll_to_view(driver, connect_button)
+        connect_button.click()
+        buffer(2)
+        
+        # Add note if message template provided
+        if message_template:
+            try:
+                # Look for "Add a note" button
+                add_note_button = try_xp(driver, ".//button[contains(span, 'Add a note') or contains(text(), 'Add a note')]", 2)
+                if add_note_button:
+                    add_note_button.click()
+                    buffer(1)
+                    
+                    # Find message textarea
+                    message_box = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, ".//textarea[@placeholder or @aria-label]"))
+                    )
+                    message_box.clear()
+                    message_box.send_keys(message_template)
+                    buffer(1)
+            except Exception as e:
+                print_lg(f"Could not add note to connection request: {e}")
+        
+        # Send connection request
+        try:
+            send_button = try_xp(driver, ".//button[contains(@aria-label, 'Send') or contains(span, 'Send')]", 2)
+            if send_button:
+                send_button.click()
+                buffer(2)
+        except:
+            # Some LinkedIn UIs auto-send when note is added
+            pass
+        
+        # Close tab and return to original window
+        if close_tabs:
+            driver.close()
+        driver.switch_to.window(original_window)
+        
+        return True, "Connection request sent successfully"
+        
+    except Exception as e:
+        print_lg(f"Failed to send connection request to {hr_name}: {e}")
+        try:
+            if len(driver.window_handles) > 1:
+                driver.close()
+            driver.switch_to.window(original_window)
+        except:
+            pass
+        return False, f"Error: {str(e)}"
+
+
+def send_message_to_connection(profile_link: str, message: str) -> tuple[bool, str]:
+    '''
+    Send a LinkedIn message to an existing connection.
+    Returns (success: bool, status_message: str)
+    '''
+    try:
+        # Store current window
+        original_window = driver.current_window_handle
+        
+        # Open profile in new tab
+        driver.execute_script(f"window.open('{profile_link}', '_blank');")
+        driver.switch_to.window(driver.window_handles[-1])
+        buffer(2)
+        
+        # Check if connected
+        try:
+            if not try_xp(driver, ".//span[contains(text(), 'Connected')]", 2):
+                driver.close()
+                driver.switch_to.window(original_window)
+                return False, "Not connected yet"
+        except:
+            pass
+        
+        # Find Message button
+        message_button = None
+        try:
+            # Try to find Message button directly
+            message_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, ".//button[contains(@aria-label, 'Message') or contains(span, 'Message')]"))
+            )
+        except:
+            try:
+                # Alternative: look for More button then Message
+                more_button = try_xp(driver, ".//button[contains(@aria-label, 'More')]", 2)
+                if more_button:
+                    more_button.click()
+                    buffer(1)
+                    message_button = try_xp(driver, ".//button[contains(span, 'Message')]", 2)
+            except:
+                pass
+        
+        if not message_button:
+            driver.close()
+            driver.switch_to.window(original_window)
+            return False, "Could not find Message button"
+        
+        scroll_to_view(driver, message_button)
+        message_button.click()
+        buffer(3)
+        
+        # Find message input box
+        try:
+            # Wait for message box to appear
+            message_box = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, ".//div[@contenteditable='true' and @role='textbox'] | .//textarea[@placeholder or @aria-label]"))
+            )
+            buffer(1)
+            
+            # Clear and type message
+            message_box.click()
+            buffer(1)
+            message_box.send_keys(Keys.CONTROL + "a")
+            message_box.send_keys(Keys.DELETE)
+            buffer(0.5)
+            message_box.send_keys(message)
+            buffer(1)
+            
+            # Send message
+            send_button = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, ".//button[contains(@aria-label, 'Send') or contains(@data-control-name, 'send')]"))
+            )
+            send_button.click()
+            buffer(2)
+            
+        except Exception as e:
+            print_lg(f"Could not send message: {e}")
+            driver.close()
+            driver.switch_to.window(original_window)
+            return False, f"Error sending message: {str(e)}"
+        
+        # Close tab and return to original window
+        if close_tabs:
+            driver.close()
+        driver.switch_to.window(original_window)
+        
+        return True, "Message sent successfully"
+        
+    except Exception as e:
+        print_lg(f"Failed to send message to {profile_link}: {e}")
+        try:
+            if len(driver.window_handles) > 1:
+                driver.close()
+            driver.switch_to.window(original_window)
+        except:
+            pass
+        return False, f"Error: {str(e)}"
+
+
+def send_followup_to_accepted_connections() -> None:
+    '''
+    Check for recruiters who accepted connection requests and send them follow-up messages
+    with the portfolio repository URL.
+    '''
+    from config.settings import (
+        send_followup_to_accepted_connections, 
+        followup_message_template,
+        max_followup_messages_per_day,
+        recruiters_catalog_file,
+        quant_poc_repo_remote
+    )
+    
+    if not send_followup_to_accepted_connections:
+        return
+    
+    try:
+        # Read recruiters catalog
+        if not os.path.exists(recruiters_catalog_file):
+            return
+        
+        recruiters_to_check = []
+        with open(recruiters_catalog_file, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                # Check for recruiters with pending connections or who haven't been messaged yet
+                connection_status = row.get('Connection Status', '')
+                last_message_date = row.get('Last Message Date', '')
+                
+                # Check if we should send follow-up:
+                # 1. Connection status is "Pending" or "Not Connected" (might have accepted)
+                # 2. No message sent yet (empty Last Message Date)
+                if (connection_status in ['Pending', 'Not Connected', ''] or not last_message_date) and row.get('Recruiter Link'):
+                    recruiters_to_check.append(row)
+        
+        if not recruiters_to_check:
+            print_lg("[Follow-up] No recruiters to check for accepted connections")
+            return
+        
+        print_lg(f"[Follow-up] Checking {len(recruiters_to_check)} recruiter(s) for accepted connections...")
+        
+        # Get portfolio repo URL
+        portfolio_repo_url = ""
+        if quant_poc_repo_remote:
+            repo_url = quant_poc_repo_remote
+            if '@' in repo_url:
+                repo_url = repo_url.split('@')[-1]
+            if repo_url.endswith('.git'):
+                repo_url = repo_url[:-4]
+            if not repo_url.startswith('http'):
+                repo_url = 'https://' + repo_url.lstrip('/')
+            portfolio_repo_url = repo_url
+        
+        messages_sent_today = 0
+        
+        for recruiter in recruiters_to_check:
+            if messages_sent_today >= max_followup_messages_per_day:
+                print_lg(f"[Follow-up] Reached daily limit of {max_followup_messages_per_day} messages")
+                break
+            
+            recruiter_name = recruiter.get('Recruiter Name', '')
+            recruiter_link = recruiter.get('Recruiter Link', '')
+            recruiter_company = recruiter.get('Recruiter Company', '')
+            
+            if not recruiter_link or recruiter_link == "Unknown":
+                continue
+            
+            # Check if connection was accepted
+            try:
+                original_window = driver.current_window_handle
+                driver.execute_script(f"window.open('{recruiter_link}', '_blank');")
+                driver.switch_to.window(driver.window_handles[-1])
+                buffer(2)
+                
+                # Check connection status
+                is_connected = False
+                try:
+                    if try_xp(driver, ".//span[contains(text(), 'Connected')]", 2):
+                        is_connected = True
+                except:
+                    pass
+                
+                driver.close()
+                driver.switch_to.window(original_window)
+                
+                if is_connected:
+                    # Format message
+                    message = followup_message_template.format(
+                        recruiter_name=recruiter_name,
+                        company_name=recruiter_company,
+                        portfolio_repo_url=portfolio_repo_url
+                    ) if followup_message_template else f"Hi {recruiter_name}, thanks for connecting! Check out my portfolio: {portfolio_repo_url}"
+                    
+                    # Send message
+                    success, status = send_message_to_connection(recruiter_link, message)
+                    
+                    if success:
+                        # Update catalog
+                        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        catalog_recruiter(
+                            recruiter_name, recruiter_link,
+                            recruiter.get('Recruiter Title', ''),
+                            recruiter_company,
+                            recruiter.get('Jobs Posted', ''),
+                            connection_status="Connected",
+                            last_message_date=current_date,
+                            notes=f"Follow-up message sent: {current_date}"
+                        )
+                        messages_sent_today += 1
+                        print_lg(f"[Follow-up] Sent message to {recruiter_name}: {status}")
+                    else:
+                        print_lg(f"[Follow-up] Failed to send message to {recruiter_name}: {status}")
+                
+            except Exception as e:
+                print_lg(f"[Follow-up] Error checking {recruiter_name}: {e}")
+                continue
+        
+        if messages_sent_today > 0:
+            print_lg(f"[Follow-up] Sent {messages_sent_today} follow-up message(s) to accepted connections")
+        
+    except Exception as e:
+        print_lg(f"[Follow-up] Error in follow-up process: {e}")
 
 
 # Function to discard the job application
@@ -852,13 +1584,23 @@ def discard_job() -> None:
 
 
 
-# Function to apply to jobs
-def apply_to_jobs(search_terms: list[str]) -> None:
-    applied_jobs = get_applied_job_ids()
+# Function to catalog quant jobs
+def catalog_quant_jobs(search_terms: list[str]) -> None:
+    '''
+    Main function to search for quant jobs, catalog them, and optionally connect with recruiters.
+    Removed all application logic - focuses on cataloging and networking.
+    '''
+    cataloged_jobs = get_cataloged_job_ids()
     rejected_jobs = set()
     blacklisted_companies = set()
-    global current_city, failed_count, skip_count, easy_applied_count, external_jobs_count, tabs_count, pause_before_submit, pause_at_failed_question, useNewResume
+    connections_today = 0
+    global current_city, failed_count, skip_count
     current_city = current_city.strip()
+    
+    # Portfolio improvement tracking
+    portfolio_improvements = []  # Track improvements per job: [(job_id, title, gaps, files_created)]
+    pending_files_to_commit = []  # Batch files for commit
+    pending_gaps_to_commit = []  # Batch gaps for commit message
 
     if randomize_search_order:  shuffle(search_terms)
     for searchTerm in search_terms:
@@ -878,7 +1620,37 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
                 # Find all job listings in current page
                 buffer(3)
-                job_listings = driver.find_elements(By.XPATH, "//li[@data-occludable-job-id]")  
+                job_listings = driver.find_elements(By.XPATH, "//li[@data-occludable-job-id]")
+                
+                # Extract salary and filter/sort by salary if enabled
+                from config.search import sort_by_salary_descending, minimum_salary_filter
+                
+                if sort_by_salary_descending or minimum_salary_filter > 0:
+                    print_lg("[Salary Filter] Extracting salaries from job listings...")
+                    # Extract salary for each job and create tuples (salary, job_element)
+                    jobs_with_salary = []
+                    for job in job_listings:
+                        salary = extract_salary_from_job_listing(job)
+                        jobs_with_salary.append((salary, job))
+                    
+                    # Filter by minimum salary if enabled
+                    if minimum_salary_filter > 0:
+                        original_count = len(jobs_with_salary)
+                        jobs_with_salary = [(s, j) for s, j in jobs_with_salary if s >= minimum_salary_filter or s == 0]
+                        filtered_count = len(jobs_with_salary)
+                        if original_count > filtered_count:
+                            print_lg(f"[Salary Filter] Filtered out {original_count - filtered_count} job(s) below ${minimum_salary_filter:,}")
+                        print_lg(f"[Salary Filter] Processing {filtered_count} job(s) meeting minimum salary of ${minimum_salary_filter:,}")
+                    
+                    # Sort by salary descending (highest first) if enabled
+                    if sort_by_salary_descending:
+                        # Sort: jobs with salary (highest first), then jobs without salary info
+                        jobs_with_salary.sort(key=lambda x: (x[0] > 0, x[0]), reverse=True)
+                        # Count jobs with salary info
+                        jobs_with_salary_count = sum(1 for salary, _ in jobs_with_salary if salary > 0)
+                        print_lg(f"[Sorting] Sorted {len(jobs_with_salary)} jobs by salary ({jobs_with_salary_count} with salary info, highest first)")
+                    
+                    job_listings = [job for _, job in jobs_with_salary]
 
             
                 for job in job_listings:
@@ -886,35 +1658,35 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     if current_count >= switch_number: break
                     print_lg("\n-@-\n")
 
-                    job_id,title,company,work_location,work_style,skip = get_job_main_details(job, blacklisted_companies, rejected_jobs)
+                    job_id, title, company, work_location, work_style, skip = get_job_main_details(job, blacklisted_companies, rejected_jobs)
                     
                     if skip: continue
-                    # Redundant fail safe check for applied jobs!
+                    
+                    # Check if already cataloged
                     try:
-                        if job_id in applied_jobs or find_by_class(driver, "jobs-s-apply__application-link", 2):
-                            print_lg(f'Already applied to "{title} | {company}" job. Job ID: {job_id}!')
+                        if job_id in cataloged_jobs:
+                            print_lg(f'Already cataloged "{title} | {company}" job. Job ID: {job_id}!')
                             continue
                     except Exception as e:
-                        print_lg(f'Trying to Apply to "{title} | {company}" job. Job ID: {job_id}')
+                        print_lg(f'Cataloging "{title} | {company}" job. Job ID: {job_id}')
 
                     job_link = "https://www.linkedin.com/jobs/view/"+job_id
-                    application_link = "Easy Applied"
-                    date_applied = "Pending"
                     hr_link = "Unknown"
                     hr_name = "Unknown"
-                    connect_request = "In Development" # Still in development
+                    hr_title = ""
+                    hr_company = ""
                     date_listed = "Unknown"
-                    skills = "Needs an AI" # Still in development
-                    resume = "Pending"
+                    skills = "Not extracted"
                     reposted = False
-                    questions_list = None
-                    screenshot_name = "Not Available"
+                    connection_status = "Not Connected"
+                    connection_date = ""
 
+                    about_company_text = "Unknown"
+                    jobs_top_card = None
                     try:
-                        rejected_jobs, blacklisted_companies, jobs_top_card = check_blacklist(rejected_jobs,job_id,company,blacklisted_companies)
+                        rejected_jobs, blacklisted_companies, jobs_top_card, about_company_text = check_blacklist(rejected_jobs, job_id, company, blacklisted_companies)
                     except ValueError as e:
                         print_lg(e, 'Skipping this job!\n')
-                        failed_job(job_id, job_link, resume, date_listed, "Found Blacklisted words in About Company", e, "Skipped", screenshot_name)
                         skip_count += 1
                         continue
                     except Exception as e:
@@ -923,156 +1695,224 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
 
 
-                    # Hiring Manager info
+                    # Recruiter/Hiring Manager info
                     try:
-                        hr_info_card = WebDriverWait(driver,2).until(EC.presence_of_element_located((By.CLASS_NAME, "hirer-card__hirer-information")))
+                        hr_info_card = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.CLASS_NAME, "hirer-card__hirer-information")))
                         hr_link = hr_info_card.find_element(By.TAG_NAME, "a").get_attribute("href")
                         hr_name = hr_info_card.find_element(By.TAG_NAME, "span").text
-                        # if connect_hr:
-                        #     driver.switch_to.new_window('tab')
-                        #     driver.get(hr_link)
-                        #     wait_span_click("More")
-                        #     wait_span_click("Connect")
-                        #     wait_span_click("Add a note")
-                        #     message_box = driver.find_element(By.XPATH, "//textarea")
-                        #     message_box.send_keys(connect_request_message)
-                        #     if close_tabs: driver.close()
-                        #     driver.switch_to.window(linkedIn_tab) 
-                        # def message_hr(hr_info_card):
-                        #     if not hr_info_card: return False
-                        #     hr_info_card.find_element(By.XPATH, ".//span[normalize-space()='Message']").click()
-                        #     message_box = driver.find_element(By.XPATH, "//div[@aria-label='Write a message…']")
-                        #     message_box.send_keys()
-                        #     try_xp(driver, "//button[normalize-space()='Send']")        
+                        # Try to extract recruiter title and company if available
+                        try:
+                            hr_title_elem = hr_info_card.find_elements(By.TAG_NAME, "span")
+                            if len(hr_title_elem) > 1:
+                                hr_title = hr_title_elem[1].text if len(hr_title_elem) > 1 else ""
+                        except:
+                            pass
                     except Exception as e:
-                        print_lg(f'HR info was not given for "{title}" with Job ID: {job_id}!')
+                        print_lg(f'Recruiter info was not given for "{title}" with Job ID: {job_id}!')
                         # print_lg(e)
-
 
                     # Calculation of date posted
                     try:
-                        # try: time_posted_text = find_by_class(driver, "jobs-unified-top-card__posted-date", 2).text
-                        # except: 
-                        time_posted_text = jobs_top_card.find_element(By.XPATH, './/span[contains(normalize-space(), " ago")]').text
-                        print("Time Posted: " + time_posted_text)
-                        if time_posted_text.__contains__("Reposted"):
-                            reposted = True
-                            time_posted_text = time_posted_text.replace("Reposted", "")
-                        date_listed = calculate_date_posted(time_posted_text.strip())
+                        if jobs_top_card:
+                            time_posted_text = jobs_top_card.find_element(By.XPATH, './/span[contains(normalize-space(), " ago")]').text
+                            print("Time Posted: " + time_posted_text)
+                            if time_posted_text.__contains__("Reposted"):
+                                reposted = True
+                                time_posted_text = time_posted_text.replace("Reposted", "")
+                            date_listed = calculate_date_posted(time_posted_text.strip())
                     except Exception as e:
-                        print_lg("Failed to calculate the date posted!",e)
+                        print_lg("Failed to calculate the date posted!", e)
 
-
+                    # Extract job description
                     description, experience_required, skip, reason, message = get_job_description()
-                    if skip:
+                    if skip and not catalog_all_jobs:
                         print_lg(message)
-                        failed_job(job_id, job_link, resume, date_listed, reason, message, "Skipped", screenshot_name)
                         rejected_jobs.add(job_id)
                         skip_count += 1
                         continue
 
-                    
-                    if use_AI and description != "Unknown":
-                        ##> ------ Yang Li : MARKYangL - Feature ------
+                    # Extract skills using AI if enabled
+                    if use_AI and description != "Unknown" and save_job_descriptions:
                         try:
-                            if ai_provider.lower() == "openai":
-                                skills = ai_extract_skills(aiClient, description)
-                            elif ai_provider.lower() == "deepseek":
-                                skills = deepseek_extract_skills(aiClient, description)
-                            elif ai_provider.lower() == "gemini":
-                                skills = gemini_extract_skills(aiClient, description)
-                            else:
-                                skills = "In Development"
-                            print_lg(f"Extracted skills using {ai_provider} AI")
-                        except Exception as e:
-                            print_lg("Failed to extract skills:", e)
-                            skills = "Error extracting skills"
-                        ##<
-
-                    uploaded = False
-                    # Case 1: Easy Apply Button
-                    if try_xp(driver, ".//button[contains(@class,'jobs-apply-button') and contains(@class, 'artdeco-button--3') and contains(@aria-label, 'Easy')]"):
-                        try: 
-                            try:
-                                errored = ""
-                                modal = find_by_class(driver, "jobs-easy-apply-modal")
-                                wait_span_click(modal, "Next", 1)
-                                # if description != "Unknown":
-                                #     resume = create_custom_resume(description)
-                                resume = "Previous resume"
-                                next_button = True
-                                questions_list = set()
-                                next_counter = 0
-                                while next_button:
-                                    next_counter += 1
-                                    if next_counter >= 15: 
-                                        if pause_at_failed_question:
-                                            screenshot(driver, job_id, "Needed manual intervention for failed question")
-                                            pyautogui.alert("Couldn't answer one or more questions.\nPlease click \"Continue\" once done.\nDO NOT CLICK Back, Next or Review button in LinkedIn.\n\n\n\n\nYou can turn off \"Pause at failed question\" setting in config.py", "Help Needed", "Continue")
-                                            next_counter = 1
-                                            continue
-                                        if questions_list: print_lg("Stuck for one or some of the following questions...", questions_list)
-                                        screenshot_name = screenshot(driver, job_id, "Failed at questions")
-                                        errored = "stuck"
-                                        raise Exception("Seems like stuck in a continuous loop of next, probably because of new questions.")
-                                    questions_list = answer_questions(modal, questions_list, work_location, job_description=description)
-                                    if useNewResume and not uploaded: uploaded, resume = upload_resume(modal, default_resume_path)
-                                    try: next_button = modal.find_element(By.XPATH, './/span[normalize-space(.)="Review"]') 
-                                    except NoSuchElementException:  next_button = modal.find_element(By.XPATH, './/button[contains(span, "Next")]')
-                                    try: next_button.click()
-                                    except ElementClickInterceptedException: break    # Happens when it tries to click Next button in About Company photos section
-                                    buffer(click_gap)
-
-                            except NoSuchElementException: errored = "nose"
-                            finally:
-                                if questions_list and errored != "stuck": 
-                                    print_lg("Answered the following questions...", questions_list)
-                                    print("\n\n" + "\n".join(str(question) for question in questions_list) + "\n\n")
-                                wait_span_click(driver, "Review", 1, scrollTop=True)
-                                cur_pause_before_submit = pause_before_submit
-                                if errored != "stuck" and cur_pause_before_submit:
-                                    decision = pyautogui.confirm('1. Please verify your information.\n2. If you edited something, please return to this final screen.\n3. DO NOT CLICK "Submit Application".\n\n\n\n\nYou can turn off "Pause before submit" setting in config.py\nTo TEMPORARILY disable pausing, click "Disable Pause"', "Confirm your information",["Disable Pause", "Discard Application", "Submit Application"])
-                                    if decision == "Discard Application": raise Exception("Job application discarded by user!")
-                                    pause_before_submit = False if "Disable Pause" == decision else True
-                                    # try_xp(modal, ".//span[normalize-space(.)='Review']")
-                                follow_company(modal)
-                                if wait_span_click(driver, "Submit application", 2, scrollTop=True): 
-                                    date_applied = datetime.now()
-                                    if not wait_span_click(driver, "Done", 2): actions.send_keys(Keys.ESCAPE).perform()
-                                elif errored != "stuck" and cur_pause_before_submit and "Yes" in pyautogui.confirm("You submitted the application, didn't you 😒?", "Failed to find Submit Application!", ["Yes", "No"]):
-                                    date_applied = datetime.now()
-                                    wait_span_click(driver, "Done", 2)
+                            if aiClient:
+                                if ai_provider.lower() == "openai":
+                                    skills = ai_extract_skills(aiClient, description)
+                                elif ai_provider.lower() == "deepseek":
+                                    skills = deepseek_extract_skills(aiClient, description)
+                                elif ai_provider.lower() == "gemini":
+                                    skills = gemini_extract_skills(aiClient, description)
                                 else:
-                                    print_lg("Since, Submit Application failed, discarding the job application...")
-                                    # if screenshot_name == "Not Available":  screenshot_name = screenshot(driver, job_id, "Failed to click Submit application")
-                                    # else:   screenshot_name = [screenshot_name, screenshot(driver, job_id, "Failed to click Submit application")]
-                                    if errored == "nose": raise Exception("Failed to click Submit application 😑")
-
-
+                                    skills = "Not extracted"
+                                print_lg(f"Extracted skills using {ai_provider} AI")
+                            else:
+                                skills = "AI client not available"
+                                print_lg("AI client not available, skipping skill extraction")
                         except Exception as e:
-                            print_lg("Failed to Easy apply!")
-                            # print_lg(e)
-                            critical_error_log("Somewhere in Easy Apply process",e)
-                            failed_job(job_id, job_link, resume, date_listed, "Problem in Easy Applying", e, application_link, screenshot_name)
-                            failed_count += 1
-                            discard_job()
-                            continue
-                    else:
-                        # Case 2: Apply externally
-                        skip, application_link, tabs_count = external_apply(pagination_element, job_id, job_link, resume, date_listed, application_link, screenshot_name)
-                        if dailyEasyApplyLimitReached:
-                            print_lg("\n###############  Daily application limit for Easy Apply is reached!  ###############\n")
-                            return
-                        if skip: continue
+                            print_lg(f"Failed to extract skills: {e}")
+                            skills = "AI extraction failed"
 
-                    submitted_jobs(job_id, title, company, work_location, work_style, description, experience_required, skills, hr_name, hr_link, resume, reposted, date_listed, date_applied, job_link, application_link, questions_list, connect_request)
-                    if uploaded:   useNewResume = False
+                    # Catalog the job
+                    catalog_job(job_id, title, company, work_location, work_style, description, 
+                               experience_required, skills, hr_name, hr_link, reposted, date_listed, 
+                               job_link, connection_status, connection_date)
+                    
+                    # Catalog the recruiter
+                    if hr_name != "Unknown" and hr_link != "Unknown" and save_recruiter_profiles:
+                        # Add portfolio repo URL to notes if available
+                        notes = ""
+                        if quant_poc_repo_remote:
+                            repo_url = quant_poc_repo_remote
+                            # Remove authentication token if present
+                            if '@' in repo_url:
+                                repo_url = repo_url.split('@')[-1]
+                            # Remove .git extension if present
+                            if repo_url.endswith('.git'):
+                                repo_url = repo_url[:-4]
+                            # Ensure https:// format
+                            if not repo_url.startswith('http'):
+                                repo_url = 'https://' + repo_url.lstrip('/')
+                            notes = f"Portfolio: {repo_url}"
+                        
+                        catalog_recruiter(hr_name, hr_link, hr_title, hr_company, job_id, 
+                                         connection_status, connection_date, "", notes)
 
-                    print_lg(f'Successfully saved "{title} | {company}" job. Job ID: {job_id} info')
+                    # Optionally connect with recruiter
+                    if connect_with_recruiters and hr_link != "Unknown" and connections_today < max_connections_per_day:
+                        # Get portfolio repo URL for message
+                        portfolio_repo_url = ""
+                        if quant_poc_repo_remote:
+                            # Convert git URL to GitHub URL format (remove .git, handle https://token@github.com format)
+                            repo_url = quant_poc_repo_remote
+                            # Remove authentication token if present
+                            if '@' in repo_url:
+                                repo_url = repo_url.split('@')[-1]
+                            # Remove .git extension if present
+                            if repo_url.endswith('.git'):
+                                repo_url = repo_url[:-4]
+                            # Ensure https:// format
+                            if not repo_url.startswith('http'):
+                                repo_url = 'https://' + repo_url.lstrip('/')
+                            portfolio_repo_url = repo_url
+                        
+                        # Format connection message template
+                        message = connection_message_template.format(
+                            recruiter_name=hr_name,
+                            company_name=company,
+                            job_title=title,
+                            portfolio_repo_url=portfolio_repo_url
+                        ) if connection_message_template else ""
+                        
+                        success, status = connect_with_recruiter(hr_link, hr_name, message)
+                        if success:
+                            connections_today += 1
+                            # Update connection status in catalog
+                            connection_status = "Connected" if "connected" in status.lower() else "Pending"
+                            catalog_recruiter(
+                                hr_name, hr_link, hr_title, hr_company, job_id,
+                                connection_status=connection_status,
+                                notes=notes if notes else f"Connection request sent: {status}"
+                            )
+                            print_lg(f"Connection request to {hr_name}: {status}") 
+                            # For now, we'll track it in the next run or manually update.
+                        else:
+                            print_lg(f"Failed to connect with {hr_name}: {status}")
+
+                    print_lg(f'Successfully cataloged "{title} | {company}" job. Job ID: {job_id}')
+                    
+                    # Improve portfolio repo based on JD requirements if enabled (sophisticated real-time improvement)
+                    if auto_improve_repo and quant_poc_repo_path and description != "Unknown":
+                        try:
+                            if use_ai_for_requirements and aiClient:
+                                print_lg(f"\n[Portfolio Improvement] Analyzing JD for: {title} at {company}")
+                                
+                                # Analyze JD requirements with enhanced extraction
+                                jd_requirements = analyze_jd_requirements(description, aiClient)
+                                
+                                # Identify gaps in portfolio with enhanced analysis
+                                from config.settings import portfolio_min_gap_priority
+                                gaps = identify_repo_gaps(jd_requirements, quant_poc_repo_path, 
+                                                         min_priority=portfolio_min_gap_priority)
+                                
+                                if gaps:
+                                    print_lg(f"[Portfolio] Identified {len(gaps)} gap(s) from this JD: {', '.join(gaps[:3])}")
+                                    if len(gaps) > 3:
+                                        print_lg(f"  ... and {len(gaps) - 3} more")
+                                    
+                                    # Generate improvements
+                                    created_files = generate_poc_improvements(
+                                        gaps, jd_requirements, aiClient, quant_poc_repo_path
+                                    )
+                                    
+                                    if created_files:
+                                        # Track improvement for this job
+                                        if track_improvements_per_job:
+                                            portfolio_improvements.append({
+                                                'job_id': job_id,
+                                                'title': title,
+                                                'company': company,
+                                                'gaps': gaps,
+                                                'files_created': created_files
+                                            })
+                                        
+                                        # Batch commits based on settings
+                                        from config.settings import portfolio_commit_batch_size
+                                        
+                                        if portfolio_commit_batch_size == 0:
+                                            # Commit immediately
+                                            commit_to_poc_repo(
+                                                quant_poc_repo_path, 
+                                                created_files, 
+                                                gaps,
+                                                quant_poc_repo_remote,
+                                                github_token
+                                            )
+                                            print_lg(f"[Portfolio] ✓ Committed {len(created_files)} new file(s) immediately")
+                                        else:
+                                            # Batch for later commit
+                                            pending_files_to_commit.extend(created_files)
+                                            pending_gaps_to_commit.extend(gaps)
+                                            print_lg(f"[Portfolio] ✓ Queued {len(created_files)} file(s) for batch commit")
+                                            
+                                            # Commit if batch size reached
+                                            if len(pending_files_to_commit) >= portfolio_commit_batch_size:
+                                                # Remove duplicates while preserving order
+                                                unique_files = []
+                                                seen = set()
+                                                for f in pending_files_to_commit:
+                                                    if f not in seen:
+                                                        unique_files.append(f)
+                                                        seen.add(f)
+                                                
+                                                unique_gaps = list(set(pending_gaps_to_commit))
+                                                
+                                                commit_to_poc_repo(
+                                                    quant_poc_repo_path, 
+                                                    unique_files, 
+                                                    unique_gaps,
+                                                    quant_poc_repo_remote,
+                                                    github_token
+                                                )
+                                                print_lg(f"[Portfolio] ✓ Batch committed {len(unique_files)} file(s) from {len(portfolio_improvements)} job(s)")
+                                                
+                                                # Clear batch
+                                                pending_files_to_commit = []
+                                                pending_gaps_to_commit = []
+                                    else:
+                                        print_lg("[Portfolio] No new files created (may already exist)")
+                                else:
+                                    print_lg("[Portfolio] ✓ No gaps - portfolio already covers all requirements")
+                            else:
+                                if not use_ai_for_requirements:
+                                    print_lg("[Portfolio] AI requirements extraction disabled")
+                                elif not aiClient:
+                                    print_lg("[Portfolio] AI client not available")
+                        except Exception as e:
+                            print_lg(f"[Portfolio] Error improving portfolio repo: {e}")
+                            import traceback
+                            print_lg(traceback.format_exc())
+                    
                     current_count += 1
-                    if application_link == "Easy Applied": easy_applied_count += 1
-                    else:   external_jobs_count += 1
-                    applied_jobs.add(job_id)
+                    cataloged_jobs.add(job_id)
 
 
 
@@ -1088,28 +1928,83 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     break
 
         except (NoSuchWindowException, WebDriverException) as e:
-            print_lg("Browser window closed or session is invalid. Ending application process.", e)
+            print_lg("Browser window closed or session is invalid. Ending cataloging process.", e)
             raise e # Re-raise to be caught by main
         except Exception as e:
             print_lg("Failed to find Job listings!")
-            critical_error_log("In Applier", e)
+            critical_error_log("In Cataloger", e)
             try:
                 print_lg(driver.page_source, pretty=True)
             except Exception as page_source_error:
                 print_lg(f"Failed to get page source, browser might have crashed. {page_source_error}")
             # print_lg(e)
+    
+    # Send follow-up messages to recruiters who accepted connections
+    try:
+        send_followup_to_accepted_connections()
+    except Exception as e:
+        print_lg(f"[Follow-up] Error in follow-up process: {e}")
+    
+    # Final commit of any pending portfolio improvements
+    if auto_improve_repo and quant_poc_repo_path and pending_files_to_commit:
+        try:
+            from config.settings import portfolio_commit_batch_size
+            if portfolio_commit_batch_size != 0:  # Only if batching is enabled
+                # Remove duplicates while preserving order
+                unique_files = []
+                seen = set()
+                for f in pending_files_to_commit:
+                    if f not in seen:
+                        unique_files.append(f)
+                        seen.add(f)
+                
+                unique_gaps = list(set(pending_gaps_to_commit))
+                
+                if unique_files:
+                    print_lg(f"\n[Portfolio] Committing final batch of {len(unique_files)} file(s)...")
+                    commit_to_poc_repo(
+                        quant_poc_repo_path, 
+                        unique_files, 
+                        unique_gaps,
+                        quant_poc_repo_remote,
+                        github_token
+                    )
+                    print_lg(f"[Portfolio] ✓ Final batch committed: {len(unique_files)} file(s) from {len(portfolio_improvements)} job(s)")
+        except Exception as e:
+            print_lg(f"[Portfolio] Error in final commit: {e}")
+    
+    # Print portfolio improvement summary
+    if track_improvements_per_job and portfolio_improvements:
+        print_lg("\n" + "="*80)
+        print_lg("PORTFOLIO IMPROVEMENT SUMMARY")
+        print_lg("="*80)
+        print_lg(f"Total jobs that improved portfolio: {len(portfolio_improvements)}")
+        total_files = sum(len(imp['files_created']) for imp in portfolio_improvements)
+        print_lg(f"Total files created: {total_files}")
+        print_lg("\nImprovements by job:")
+        for imp in portfolio_improvements:
+            print_lg(f"  • {imp['title']} at {imp['company']}")
+            print_lg(f"    - {len(imp['gaps'])} gap(s) identified")
+            print_lg(f"    - {len(imp['files_created'])} file(s) created")
+        print_lg("="*80 + "\n")
+
+
+# Legacy function for backward compatibility
+def apply_to_jobs(search_terms: list[str]) -> None:
+    '''
+    Legacy function - redirects to catalog_quant_jobs for cataloging purposes.
+    '''
+    catalog_quant_jobs(search_terms)
 
         
 def run(total_runs: int) -> int:
-    if dailyEasyApplyLimitReached:
-        return total_runs
     print_lg("\n########################################################################################################################\n")
     print_lg(f"Date and Time: {datetime.now()}")
     print_lg(f"Cycle number: {total_runs}")
     print_lg(f"Currently looking for jobs posted within '{date_posted}' and sorting them by '{sort_by}'")
-    apply_to_jobs(search_terms)
+    catalog_quant_jobs(search_terms)
     print_lg("########################################################################################################################\n")
-    if not dailyEasyApplyLimitReached:
+    if run_non_stop:
         print_lg("Sleeping for 10 min...")
         sleep(300)
         print_lg("Few more min... Gonna start with in next 5 min...")
@@ -1126,11 +2021,19 @@ def main() -> None:
     try:
         global linkedIn_tab, tabs_count, useNewResume, aiClient
         alert_title = "Error Occurred. Closing Browser!"
-        total_runs = 1        
+        total_runs = 1
+        
+        # Clean up any existing log file issues
+        safe_log_cleanup()
+        force_close_log_handles()
+        
         validate_config()
         
         if not os.path.exists(default_resume_path):
-            pyautogui.alert(text='Your default resume "{}" is missing! Please update it\'s folder path "default_resume_path" in config.py\n\nOR\n\nAdd a resume with exact name and path (check for spelling mistakes including cases).\n\n\nFor now the bot will continue using your previous upload from LinkedIn!'.format(default_resume_path), title="Missing Resume", button="OK")
+            current_dir = os.getcwd()
+            absolute_path = os.path.abspath(default_resume_path)
+            error_message = f'Your default resume "{default_resume_path}" is missing!\n\nCurrent working directory: {current_dir}\nAbsolute path: {absolute_path}\n\nPlease update the folder path "default_resume_path" in config/questions.py\n\nOR\n\nAdd a resume with exact name and path (check for spelling mistakes including cases).\n\n\nFor now the bot will continue using your previous upload from LinkedIn!'
+            safe_alert(text=error_message, title="Missing Resume", button="OK")
             useNewResume = False
         
         # Login to LinkedIn
@@ -1168,7 +2071,7 @@ def main() -> None:
             except Exception as e:
                 print_lg("Failed to extract about company info!", e)
         
-        # Start applying to jobs
+        # Start cataloging quant jobs
         driver.switch_to.window(linkedIn_tab)
         total_runs = run(total_runs)
         while(run_non_stop):
@@ -1182,15 +2085,13 @@ def main() -> None:
                 total_runs = run(total_runs)
                 sort_by = "Most recent" if sort_by == "Most relevant" else "Most relevant"
             total_runs = run(total_runs)
-            if dailyEasyApplyLimitReached:
-                break
         
 
     except (NoSuchWindowException, WebDriverException) as e:
         print_lg("Browser window closed or session is invalid. Exiting.", e)
     except Exception as e:
         critical_error_log("In Applier Main", e)
-        pyautogui.alert(e,alert_title)
+        safe_alert(str(e), alert_title)
     finally:
         print_lg("\n\nTotal runs:                     {}".format(total_runs))
         print_lg("Jobs Easy Applied:              {}".format(easy_applied_count))
@@ -1215,11 +2116,11 @@ def main() -> None:
             "The only limit to our realization of tomorrow will be our doubts of today. - Franklin D. Roosevelt"
             ])
         msg = f"\n{quote}\n\n\nBest regards,\nSai Vignesh Golla\nhttps://www.linkedin.com/in/saivigneshgolla/\n\n"
-        pyautogui.alert(msg, "Exiting..")
+        safe_alert(msg, "Exiting..")
         print_lg(msg,"Closing the browser...")
         if tabs_count >= 10:
             msg = "NOTE: IF YOU HAVE MORE THAN 10 TABS OPENED, PLEASE CLOSE OR BOOKMARK THEM!\n\nOr it's highly likely that application will just open browser and not do anything next time!" 
-            pyautogui.alert(msg,"Info")
+            safe_alert(msg,"Info")
             print_lg("\n"+msg)
         ##> ------ Yang Li : MARKYangL - Feature ------
         if use_AI and aiClient:

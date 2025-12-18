@@ -12,6 +12,17 @@ GitHub:     https://github.com/GodsScion/Auto_job_applier_linkedIn
 version:    24.12.29.12.30
 '''
 
+import os
+import sys
+
+# Add parent directory to path if needed for imports
+if __name__ == '__main__' or not __package__:
+    # If running as script or not as package, ensure parent directory is in path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
 from modules.helpers import make_directories
 from config.settings import run_in_background, stealth_mode, disable_extensions, safe_mode, file_name, failed_file_name, logs_folder_path, generated_resume_path
 from config.questions import default_resume_path
@@ -45,9 +56,10 @@ try:
         #     driver = uc.Chrome(driver_executable_path="C:\\Program Files\\Google\\Chrome\\chromedriver-win64\\chromedriver.exe", options=options)
         # except (FileNotFoundError, PermissionError) as e: 
         #     print_lg("(Undetected Mode) Got '{}' when using pre-installed ChromeDriver.".format(type(e).__name__)) 
-            print_lg("Downloading Chrome Driver... This may take some time. Undetected mode requires download every run!")
-            driver = uc.Chrome(options=options)
-    else: driver = webdriver.Chrome(options=options) #, service=Service(executable_path="C:\\Program Files\\Google\\Chrome\\chromedriver-win64\\chromedriver.exe"))
+        print_lg("Downloading Chrome Driver... This may take some time. Undetected mode requires download every run!")
+        driver = uc.Chrome(options=options)
+    else: 
+        driver = webdriver.Chrome(options=options) #, service=Service(executable_path="C:\\Program Files\\Google\\Chrome\\chromedriver-win64\\chromedriver.exe"))
     driver.maximize_window()
     wait = WebDriverWait(driver, 5)
     actions = ActionChains(driver)
@@ -56,7 +68,10 @@ except Exception as e:
     if isinstance(e,TimeoutError): msg = "Couldn't download Chrome-driver. Set stealth_mode = False in config!"
     print_lg(msg)
     critical_error_log("In Opening Chrome", e)
-    from pyautogui import alert
+    try:
+        from .safe_pyautogui import alert
+    except ImportError:
+        from modules.safe_pyautogui import alert
     alert(msg, "Error in opening chrome")
     try: driver.quit()
     except NameError: exit()

@@ -3,8 +3,7 @@ from config.secrets import *
 from config.settings import showAiErrorAlerts
 from modules.helpers import print_lg, critical_error_log, convert_to_json
 from modules.ai.prompts import *
-
-from pyautogui import confirm
+from modules.safe_pyautogui import confirm
 from openai import OpenAI
 from openai.types.model import Model
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
@@ -152,8 +151,96 @@ def deepseek_extract_skills(client: OpenAI, job_description: str, stream: bool =
     try:
         print_lg("Extracting skills from job description using DeepSeek...")
         
-        # Using optimized DeepSeek prompt
-        prompt = deepseek_extract_skills_prompt.format(job_description)
+        # Enhanced text cleaning to handle encoding issues
+        def clean_text_for_ai(text):
+            """
+            Clean text to handle various encoding issues and special characters
+            """
+            if not text or not isinstance(text, str):
+                return "No job description available"
+            
+            try:
+                # First, normalize Unicode characters
+                import unicodedata
+                text = unicodedata.normalize('NFKD', text)
+                
+                # Replace common problematic Unicode characters
+                replacements = {
+                    '\u2013': '-',      # en dash
+                    '\u2014': '--',     # em dash
+                    '\u2018': "'",      # left single quotation mark
+                    '\u2019': "'",      # right single quotation mark
+                    '\u201c': '"',      # left double quotation mark
+                    '\u201d': '"',      # right double quotation mark
+                    '\u2026': '...',    # horizontal ellipsis
+                    '\u00a0': ' ',      # non-breaking space
+                    '\u00b7': '*',      # middle dot
+                    '\u2022': '*',      # bullet
+                    '\u2012': '-',      # figure dash
+                    '\u2015': '--',     # horizontal bar
+                    '\u00ae': '(R)',    # registered trademark
+                    '\u00a9': '(C)',    # copyright
+                    '\u2122': '(TM)',   # trademark
+                    '\u2020': '+',      # dagger
+                    '\u2021': '++',     # double dagger
+                    '\u2030': '%',      # per mille
+                    '\u2032': "'",      # prime
+                    '\u2033': '"',      # double prime
+                    '\u2039': '<',      # single left-pointing angle quotation mark
+                    '\u203a': '>',      # single right-pointing angle quotation mark
+                    '\u2044': '/',      # fraction slash
+                    '\u2045': '[',      # left square bracket with quill
+                    '\u2046': ']',      # right square bracket with quill
+                    '\u20ac': 'EUR',    # euro sign
+                    '\u2117': '(P)',    # sound recording copyright
+                    '\u211e': 'Rx',     # prescription take
+                    '\u2120': '(SM)',   # service mark
+                    '\u2126': 'Ohm',    # ohm sign
+                    '\u212a': 'K',      # kelvin sign
+                    '\u212b': 'A',      # angstrom sign
+                    '\u2132': 'F',      # turned capital F
+                    '\u2133': 'M',      # script capital M
+                    '\u2134': 'O',      # script capital O
+                    '\u2135': 'Alef',   # alef symbol
+                    '\u2136': 'Bet',    # bet symbol
+                    '\u2137': 'Gimel',  # gimel symbol
+                    '\u2138': 'Dalet',  # dalet symbol
+                }
+                
+                for unicode_char, replacement in replacements.items():
+                    text = text.replace(unicode_char, replacement)
+                
+                # Remove any remaining non-printable characters except newlines and tabs
+                import re
+                text = re.sub(r'[^\x20-\x7E\n\t]', '', text)
+                
+                # Ensure the text is properly encoded as UTF-8
+                text = text.encode('utf-8', errors='ignore').decode('utf-8')
+                
+                # Remove excessive whitespace
+                text = re.sub(r'\s+', ' ', text).strip()
+                
+                return text
+                
+            except Exception as e:
+                print_lg(f"Error in text cleaning: {e}")
+                # Fallback: basic UTF-8 conversion
+                try:
+                    return text.encode('utf-8', errors='replace').decode('utf-8')
+                except:
+                    return "Job description contains unsupported characters"
+        
+        clean_description = clean_text_for_ai(job_description)
+        
+        # Ensure the prompt is also properly encoded
+        try:
+            prompt = deepseek_extract_skills_prompt.format(clean_description)
+            # Double-check the prompt is clean
+            prompt = clean_text_for_ai(prompt)
+        except Exception as e:
+            print_lg(f"Error formatting prompt: {e}")
+            prompt = f"Extract skills from this job description: {clean_description}"
+        
         messages = [{"role": "user", "content": prompt}]
         
         # DeepSeek API supports json_object response format
@@ -196,15 +283,96 @@ def deepseek_answer_question(
     try:
         print_lg(f"Answering question using DeepSeek AI: {question}")
         
-        # Prepare user information
-        user_info = user_information_all or ""
+        # Enhanced text cleaning function
+        def clean_text_for_ai(text):
+            """
+            Clean text to handle various encoding issues and special characters
+            """
+            if not text or not isinstance(text, str) or text == "Unknown":
+                return text if text != "Unknown" else "N/A"
+            
+            try:
+                # First, normalize Unicode characters
+                import unicodedata
+                text = unicodedata.normalize('NFKD', text)
+                
+                # Replace common problematic Unicode characters
+                replacements = {
+                    '\u2013': '-',      # en dash
+                    '\u2014': '--',     # em dash
+                    '\u2018': "'",      # left single quotation mark
+                    '\u2019': "'",      # right single quotation mark
+                    '\u201c': '"',      # left double quotation mark
+                    '\u201d': '"',      # right double quotation mark
+                    '\u2026': '...',    # horizontal ellipsis
+                    '\u00a0': ' ',      # non-breaking space
+                    '\u00b7': '*',      # middle dot
+                    '\u2022': '*',      # bullet
+                    '\u2012': '-',      # figure dash
+                    '\u2015': '--',     # horizontal bar
+                    '\u00ae': '(R)',    # registered trademark
+                    '\u00a9': '(C)',    # copyright
+                    '\u2122': '(TM)',   # trademark
+                    '\u2020': '+',      # dagger
+                    '\u2021': '++',     # double dagger
+                    '\u2030': '%',      # per mille
+                    '\u2032': "'",      # prime
+                    '\u2033': '"',      # double prime
+                    '\u2039': '<',      # single left-pointing angle quotation mark
+                    '\u203a': '>',      # single right-pointing angle quotation mark
+                    '\u2044': '/',      # fraction slash
+                    '\u2045': '[',      # left square bracket with quill
+                    '\u2046': ']',      # right square bracket with quill
+                    '\u20ac': 'EUR',    # euro sign
+                    '\u2117': '(P)',    # sound recording copyright
+                    '\u211e': 'Rx',     # prescription take
+                    '\u2120': '(SM)',   # service mark
+                    '\u2126': 'Ohm',    # ohm sign
+                    '\u212a': 'K',      # kelvin sign
+                    '\u212b': 'A',      # angstrom sign
+                    '\u2132': 'F',      # turned capital F
+                    '\u2133': 'M',      # script capital M
+                    '\u2134': 'O',      # script capital O
+                    '\u2135': 'Alef',   # alef symbol
+                    '\u2136': 'Bet',    # bet symbol
+                    '\u2137': 'Gimel',  # gimel symbol
+                    '\u2138': 'Dalet',  # dalet symbol
+                }
+                
+                for unicode_char, replacement in replacements.items():
+                    text = text.replace(unicode_char, replacement)
+                
+                # Remove any remaining non-printable characters except newlines and tabs
+                import re
+                text = re.sub(r'[^\x20-\x7E\n\t]', '', text)
+                
+                # Ensure the text is properly encoded as UTF-8
+                text = text.encode('utf-8', errors='ignore').decode('utf-8')
+                
+                # Remove excessive whitespace
+                text = re.sub(r'\s+', ' ', text).strip()
+                
+                return text
+                
+            except Exception as e:
+                print_lg(f"Error in text cleaning: {e}")
+                # Fallback: basic UTF-8 conversion
+                try:
+                    return text.encode('utf-8', errors='replace').decode('utf-8')
+                except:
+                    return "Text contains unsupported characters"
+        
+        # Clean all inputs
+        clean_question = clean_text_for_ai(question)
+        clean_user_info = clean_text_for_ai(user_information_all) if user_information_all else "N/A"
         
         # Prepare prompt based on question type
-        prompt = ai_answer_prompt.format(user_info, question)
+        prompt = ai_answer_prompt.format(clean_user_info, clean_question)
         
         # Add options to the prompt if available
         if options and (question_type in ['single_select', 'multiple_select']):
-            options_str = "OPTIONS:\n" + "\n".join([f"- {option}" for option in options])
+            clean_options = [clean_text_for_ai(option) for option in options]
+            options_str = "OPTIONS:\n" + "\n".join([f"- {option}" for option in clean_options])
             prompt += f"\n\n{options_str}"
             
             if question_type == 'single_select':
@@ -213,11 +381,13 @@ def deepseek_answer_question(
                 prompt += "\n\nYou may select MULTIPLE options from the list above if appropriate."
         
         # Add job details for context if available
-        if job_description:
-            prompt += f"\n\nJOB DESCRIPTION:\n{job_description}"
+        if job_description and job_description != "Unknown":
+            clean_job_desc = clean_text_for_ai(job_description)
+            prompt += f"\n\nJOB DESCRIPTION:\n{clean_job_desc}"
         
-        if about_company:
-            prompt += f"\n\nABOUT COMPANY:\n{about_company}"
+        if about_company and about_company != "Unknown":
+            clean_company = clean_text_for_ai(about_company)
+            prompt += f"\n\nABOUT COMPANY:\n{clean_company}"
         
         messages = [{"role": "user", "content": prompt}]
         

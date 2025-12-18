@@ -17,7 +17,31 @@ version:    24.12.29.12.30
 
 # These Sentences are Searched in LinkedIn
 # Enter your search terms inside '[ ]' with quotes ' "searching title" ' for each search followed by comma ', ' Eg: ["Software Engineer", "Software Developer", "Selenium Developer"]
-search_terms = ["Software Engineer", "Software Developer", "Python Developer", "Selenium Developer", "React Developer", "Java Developer", "Front End Developer", "Full Stack Developer", "Web Developer", "Nodejs Developer"]
+# Quant-specific job search terms
+search_terms = [
+    "Quantitative Analyst", "Quant Analyst", "Quant Researcher", "Quant Trader", 
+    "Quant Developer", "Quantitative Developer", "Quantitative Researcher", 
+    "Quantitative Strategist", "Quantitative Portfolio Manager", "Algorithmic Trader", 
+    "Quantitative Risk Analyst", "Quantitative Risk Manager", "Quantitative Researcher", 
+    "Quantitative Engineer", "Quantitative Software Engineer", "Quantitative Developer", 
+    "Quantitative Modeler", "Quantitative Model Developer", "Quantitative Research Analyst", 
+    "Quantitative Investment Analyst", "Quantitative Trading Analyst", "Quantitative Strategy Analyst",
+    "Senior Quantitative Analyst", "Senior Quant Analyst", "Senior Quant Researcher", 
+    "Senior Quant Trader", "Senior Quant Developer", "Principal Quantitative Analyst",
+    "Lead Quantitative Analyst", "Quantitative Team Lead", "Head of Quantitative Research",
+    "Director of Quantitative Research", "VP Quantitative Research", "Quantitative Research Manager",
+    "Quantitative Trading Manager", "Quantitative Risk Manager", "Quantitative Portfolio Manager",
+    "Quantitative Investment Manager", "Quantitative Strategy Manager", "Quantitative Analytics Manager",
+    "Quantitative Finance Analyst", "Quantitative Finance Researcher", "Quantitative Finance Developer",
+    "Quantitative Finance Engineer", "Quantitative Finance Strategist", "Quantitative Finance Trader",
+    "Hedge Fund Quant", "Prop Trading Quant", "Market Making Quant", "High Frequency Trading Quant",
+    "Algorithmic Trading Quant", "Systematic Trading Quant", "Quantitative Arbitrage",
+    "Statistical Arbitrage Quant", "Pairs Trading Quant", "Options Pricing Quant",
+    "Derivatives Pricing Quant", "Fixed Income Quant", "Equity Quant", "FX Quant", "Commodities Quant",
+    "Credit Risk Quant", "Market Risk Quant", "Model Risk Quant", "Risk Model Validation Quant",
+    "Quantitative Credit Analyst", "Quantitative Market Risk Analyst", "Quantitative Model Validation",
+    "Quantitative Backtesting", "Quantitative Strategy Development", "Quantitative Signal Research"
+]
 
 # Search location, this will be filled in "City, state, or zip code" search box. If left empty as "", tool will not fill it.
 search_location = "United States"               # Some valid examples: "", "United States", "India", "Chicago, Illinois, United States", "90001, Los Angeles, California, United States", "Bengaluru, Karnataka, India", etc.
@@ -26,7 +50,7 @@ search_location = "United States"               # Some valid examples: "", "Unit
 switch_number = 30                 # Only numbers greater than 0... Don't put in quotes
 
 # Do you want to randomize the search order for search_terms?
-randomize_search_order = False     # True of False, Note: True or False are case-sensitive
+randomize_search_order = True     # True of False, Note: True or False are case-sensitive
 
 
 # >>>>>>>>>>> Job Search Filters <<<<<<<<<<<
@@ -46,20 +70,27 @@ This is below format: QUESTION = VALID_ANSWER
 
 '''
 
-sort_by = ""                       # "Most recent", "Most relevant" or ("" to not select) 
-date_posted = "Past week"         # "Any time", "Past month", "Past week", "Past 24 hours" or ("" to not select)
-salary = ""                        # "$40,000+", "$60,000+", "$80,000+", "$100,000+", "$120,000+", "$140,000+", "$160,000+", "$180,000+", "$200,000+"
+sort_by = ""                       # "Most recent", "Most relevant" or ("" to not select)
+date_posted = ""                   # "Any time", "Past month", "Past week", "Past 24 hours" or ("" to not select)
+salary = "$200,000+"                        # "$40,000+", "$60,000+", "$80,000+", "$100,000+", "$120,000+", "$130,000+", "$140,000+", "$160,000+", "$180,000+", "$200,000+"
 
-easy_apply_only = True             # True or False, Note: True or False are case-sensitive
+# Filter jobs by minimum salary after scraping (process only jobs meeting this threshold)
+# Set to 0 to process all jobs regardless of salary
+minimum_salary_filter = 200000     # Minimum salary in USD (e.g., 200000 = $200k+, 0 = no filter)
 
-experience_level = []              # (multiple select) "Internship", "Entry level", "Associate", "Mid-Senior level", "Director", "Executive"
+# Sort jobs by salary after loading (True = highest first, False = no sorting, process in LinkedIn order)
+sort_by_salary_descending = True   # True or False, Note: True or False are case-sensitive
+
+easy_apply_only = False            # True or False, Note: True or False are case-sensitive (Not used for cataloging, kept for compatibility)
+
+experience_level = ["Mid-Senior level", "Director", "Executive"]              # (multiple select) "Internship", "Entry level", "Associate", "Mid-Senior level", "Director", "Executive"
 job_type = []                      # (multiple select) "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship", "Other"
-on_site = []                       # (multiple select) "On-site", "Remote", "Hybrid"
+on_site = ["Remote"]               # (multiple select) "On-site", "Remote", "Hybrid" - Accept all, filter programmatically
 
 companies = []                     # (dynamic multiple select) make sure the name you type in list exactly matches with the company name you're looking for, including capitals. 
                                    # Eg: "7-eleven", "Google","X, the moonshot factory","YouTube","CapitalG","Adometry (acquired by Google)","Meta","Apple","Byte Dance","Netflix", "Snowflake","Mineral.ai","Microsoft","JP Morgan","Barclays","Visa","American Express", "Snap Inc", "JPMorgan Chase & Co.", "Tata Consultancy Services", "Recruiting from Scratch", "Epic", and so on...
-location = []                      # (dynamic multiple select)
-industry = []                      # (dynamic multiple select)
+location = []                      # (dynamic multiple select) - No filter, accept all locations (filter programmatically)
+industry = []                      # (dynamic multiple select) - Open to all industries
 job_function = []                  # (dynamic multiple select)
 job_titles = []                    # (dynamic multiple select)
 benefits = []                      # (dynamic multiple select)
@@ -73,7 +104,7 @@ fair_chance_employer = False       # True or False, Note: True or False are case
 ## >>>>>>>>>>> RELATED SETTING <<<<<<<<<<<
 
 # Pause after applying filters to let you modify the search results and filters?
-pause_after_filters = True         # True or False, Note: True or False are case-sensitive
+pause_after_filters = False        # True or False, Note: True or False are case-sensitive
 
 ##
 
@@ -98,7 +129,7 @@ security_clearance = False         # True or False, Note: True or False are case
 did_masters = True                 # True or False, Note: True or False are case-sensitive
 
 # Avoid applying to jobs if their required experience is above your current_experience. (Set value as -1 if you want to apply to all ignoring their required experience...)
-current_experience = 5             # Integers > -2 (Ex: -1, 0, 1, 2, 3, 4...)
+current_experience = 8             # Integers > -2 (Ex: -1, 0, 1, 2, 3, 4...)
 ##
 
 

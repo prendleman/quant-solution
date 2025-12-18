@@ -19,7 +19,8 @@ version:    24.12.29.12.30
 # >>>>>>>>>>> Easy Apply Questions & Inputs <<<<<<<<<<<
 
 # Give an relative path of your default resume to be uploaded. If file in not found, will continue using your previously uploaded resume in LinkedIn.
-default_resume_path = "all resumes/default/resume.pdf"      # (In Development)
+import os
+default_resume_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "all resumes", "default", "resume.pdf")      # (In Development)
 
 # What do you want to answer for questions that ask about years of experience you have, this is different from current_experience? 
 years_of_experience = "5"          # A number in quotes Eg: "0","1","2","3","4", etc.
@@ -42,7 +43,7 @@ us_citizenship = "U.S. Citizen/Permanent Resident"
 ## SOME ANNOYING QUESTIONS BY COMPANIES 🫠 ##
 
 # What to enter in your desired salary question (American and European), What is your expected CTC (South Asian and others)?, only enter in numbers as some companies only allow numbers,
-desired_salary = 1200000          # 80000, 90000, 100000 or 120000 and so on... Do NOT use quotes
+desired_salary = 200000          # 80000, 90000, 100000 or 120000 and so on... Do NOT use quotes
 '''
 Note: If question has the word "lakhs" in it (Example: What is your expected CTC in lakhs), 
 then it will add '.' before last 5 digits and answer. Examples: 
@@ -113,6 +114,13 @@ Note: If left empty as "", the tool will not answer the question. However, note 
 # Name of your most recent employer
 recent_employer = "Not Applicable" # "", "Lala Company", "Google", "Snowflake", "Databricks"
 
+# College/University information
+college_name = "Shimer College" # "University of Illinois", "Northwestern University", etc.
+college_start_date = "2000" # Year you started college (e.g., "2018", "2018-09", "2018-09-01")
+college_end_date = "2004" # Year you graduated college (e.g., "2022", "2022-05", "2022-05-15")
+college_degree = "Bachelor of Arts in Humanities" # "Bachelor of Science", "Master of Science", "Bachelor of Arts", etc.
+college_major = "Humanities" # "Computer Science", "Engineering", "Business", etc.
+
 # Example question: "On a scale of 1-10 how much experience do you have building web or mobile applications? 1 being very little or only in school, 10 being that you have built and launched applications to real users"
 confidence_level = "8"             # Any number between "1" to "10" including 1 and 10, put it in quotes ""
 ##
@@ -123,14 +131,14 @@ confidence_level = "8"             # Any number between "1" to "10" including 1 
 
 ## Allow Manual Inputs
 # Should the tool pause before every submit application during easy apply to let you check the information?
-pause_before_submit = True         # True or False, Note: True or False are case-sensitive
+pause_before_submit = False        # True or False, Note: True or False are case-sensitive
 '''
 Note: Will be treated as False if `run_in_background = True`
 '''
 
 # Should the tool pause if it needs help in answering questions during easy apply?
 # Note: If set as False will answer randomly...
-pause_at_failed_question = True    # True or False, Note: True or False are case-sensitive
+pause_at_failed_question = False   # True or False, Note: True or False are case-sensitive
 '''
 Note: Will be treated as False if `run_in_background = True`
 '''
