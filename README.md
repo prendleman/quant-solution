@@ -148,8 +148,22 @@ This portfolio contains implementations of various quantitative finance concepts
 
 ### Installation
 
+**Option 1: Install from source**
 ```bash
-pip install numpy pandas scipy scikit-learn pytorch
+git clone https://github.com/yourusername/quant-portfolio.git
+cd quant-portfolio
+pip install -r requirements.txt
+pip install -e .
+```
+
+**Option 2: Install dependencies only**
+```bash
+pip install -r requirements.txt
+```
+
+**Option 3: Install with development dependencies**
+```bash
+pip install -e ".[dev]"
 ```
 
 ### Usage
@@ -159,16 +173,41 @@ Each module can be run independently or imported as a library:
 ```python
 from analysis.risk_management_ import calculate_var, calculate_cvar
 from strategies.high_frequency_trading_ import TradingStrategy
+import pandas as pd
 
 # Example: Calculate VaR
-returns = pd.Series([...])
+returns = pd.Series([0.01, -0.02, 0.015, -0.01, 0.005, -0.03])
 var_95 = calculate_var(returns, confidence_level=0.05)
+print(f"VaR (95%): {var_95:.4f}")
 ```
+
+See `examples/portfolio_demo.py` for comprehensive usage examples.
+
+### Running Tests
+
+```bash
+pytest tests/ -v
+```
+
+With coverage:
+```bash
+pytest tests/ -v --cov=. --cov-report=html
+```
+
+## Documentation
+
+- **API Reference**: See [docs/API.md](docs/API.md) for detailed API documentation
+- **Examples**: See `examples/portfolio_demo.py` for usage examples
+- **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines
 
 ## Portfolio Evolution
 
 This portfolio is continuously improved based on quantitative job market requirements. New features are added automatically to demonstrate the latest quant skills and technologies in demand.
 
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ## License
 
-This portfolio is for demonstration purposes.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
