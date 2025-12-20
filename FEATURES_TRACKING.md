@@ -457,6 +457,87 @@ This document tracks all features and implementations added to the quant portfol
   - Factor rotation (varimax/promax)
 - **Date Enhanced**: 2025-01-17
 
+### Advanced Time Series Models
+- **File**: `models/time_series_models.py`
+- **Features**:
+  - ARIMA models
+  - Vector Autoregression (VAR)
+  - State space models
+  - Cointegrated VAR (VECM)
+  - Structural break detection
+- **Date Added**: 2025-01-17
+
+### Alternative Risk Measures
+- **File**: `analysis/alternative_risk_measures.py`
+- **Features**:
+  - Sortino ratio
+  - Omega ratio
+  - Calmar ratio
+  - Sterling ratio
+  - Kappa ratio
+  - Gain-to-Pain ratio
+  - Ulcer Index
+  - Pain Index
+- **Date Added**: 2025-01-17
+
+### Market Making Strategies
+- **File**: `strategies/market_making.py`
+- **Features**:
+  - Optimal bid-ask spread calculation
+  - Inventory risk management
+  - Market making P&L analysis
+  - Avellaneda-Stoikov model
+  - Dynamic spread adjustment
+- **Date Added**: 2025-01-17
+
+### Yield Curve Models
+- **File**: `models/yield_curve_models.py`
+- **Features**:
+  - Nelson-Siegel model
+  - Svensson model
+  - Yield curve interpolation
+  - Forward rate curves
+  - Yield curve slope analysis
+- **Date Added**: 2025-01-17
+
+### Volatility Surface Modeling
+- **File**: `models/volatility_surface.py`
+- **Features**:
+  - 3D volatility surface interpolation
+  - Volatility smile/skew analysis
+  - Volatility term structure
+  - Stochastic volatility surfaces (Heston)
+- **Date Added**: 2025-01-17
+
+### Dynamic Correlation Models
+- **File**: `models/dynamic_correlation.py`
+- **Features**:
+  - Rolling correlation
+  - DCC-GARCH correlation
+  - Regime-dependent correlation
+  - Correlation break detection
+  - Average correlation matrices
+- **Date Added**: 2025-01-17
+
+### Factor Timing Strategies
+- **File**: `strategies/factor_timing.py`
+- **Features**:
+  - Factor momentum timing
+  - Factor regime timing
+  - Factor rotation strategies
+  - Dynamic factor exposure
+- **Date Added**: 2025-01-17
+
+### High-Frequency Analysis
+- **File**: `analysis/high_frequency_analysis.py`
+- **Features**:
+  - Tick data analysis
+  - Order flow imbalance
+  - Realized volatility (high-freq)
+  - Microstructure noise estimation
+  - Volume profile analysis
+- **Date Added**: 2025-01-17
+
 ## Portfolio Evolution
 
 This portfolio is continuously improved based on quantitative job market requirements. New features are automatically added to demonstrate the latest quant skills and technologies in demand.
