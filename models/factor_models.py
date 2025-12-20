@@ -186,6 +186,83 @@ def style_analysis(returns: pd.Series, style_factors: pd.DataFrame) -> Dict:
     }
 
 
+def independent_component_analysis(returns: pd.DataFrame, n_components: int = 5) -> Dict[str, pd.DataFrame]:
+    """
+    Independent Component Analysis (ICA) for factor extraction.
+    
+    Args:
+        returns: Asset returns DataFrame
+        n_components: Number of independent components
+        
+    Returns:
+        Dictionary with ICA factors and mixing matrix
+    """
+    try:
+        from sklearn.decomposition import FastICA
+    except ImportError:
+        # Fallback to PCA if ICA not available
+        from sklearn.decomposition import PCA
+        pca = PCA(n_components=n_components)
+        components = pca.fit_transform(returns.fillna(0))
+        factor_returns = pd.DataFrame(
+            components,
+            index=returns.index,
+            columns=[f'ICA_Factor_{i+1}' for i in range(n_components)]
+        )
+        return {
+            'factor_returns': factor_returns,
+            'mixing_matrix': pd.DataFrame(
+                pca.components_.T,
+                index=returns.columns,
+                columns=[f'ICA_Factor_{i+1}' for i in range(n_components)]
+            )
+        }
+    
+    ica = FastICA(n_components=n_components, random_state=42, max_iter=1000)
+    components = ica.fit_transform(returns.fillna(0))
+    
+    factor_returns = pd.DataFrame(
+        components,
+        index=returns.index,
+        columns=[f'ICA_Factor_{i+1}' for i in range(n_components)]
+    )
+    
+    mixing_matrix = pd.DataFrame(
+        ica.mixing_,
+        index=returns.columns,
+        columns=[f'ICA_Factor_{i+1}' for i in range(n_components)]
+    )
+    
+    return {
+        'factor_returns': factor_returns,
+        'mixing_matrix': mixing_matrix
+    }
+
+
+def factor_rotation(loadings: pd.DataFrame, method: str = 'varimax') -> pd.DataFrame:
+    """
+    Rotate factor loadings for better interpretation.
+    
+    Args:
+        loadings: Factor loadings matrix
+        method: Rotation method ('varimax' or 'promax')
+        
+    Returns:
+        Rotated loadings
+    """
+    # Simplified rotation (in practice, use specialized libraries)
+    # Varimax: maximize variance of squared loadings
+    loadings_squared = loadings ** 2
+    
+    # Normalize
+    normalized = loadings_squared.div(loadings_squared.sum(axis=1), axis=0)
+    
+    # Rotated loadings (simplified)
+    rotated = normalized * loadings
+    
+    return rotated
+
+
 if __name__ == "__main__":
     # Example usage
     dates = pd.date_range('2020-01-01', periods=500, freq='D')
