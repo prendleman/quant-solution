@@ -139,6 +139,54 @@ This portfolio contains implementations of various quantitative finance concepts
 - Research backtesting
 - Feature importance analysis
 
+### Execution Algorithms
+- TWAP (Time-Weighted Average Price) execution
+- VWAP (Volume-Weighted Average Price) execution
+- Implementation Shortfall optimization
+- Adaptive execution strategies
+- Optimal execution (Almgren-Chriss model)
+- Execution quality evaluation
+
+### Fixed Income Models
+- Bond pricing and valuation
+- Yield to maturity calculation
+- Macaulay and Modified duration
+- Bond convexity
+- Yield curve bootstrapping
+- Duration matching for ALM
+
+### Foreign Exchange (FX) Models
+- Forward rate calculation
+- Carry trade analysis
+- FX volatility smile/skew
+- Triangular arbitrage detection
+- Purchasing Power Parity (PPP)
+- Currency basket hedging
+
+### Market Microstructure
+- Order book imbalance analysis
+- Effective spread calculation
+- Kyle's Lambda (price impact)
+- Amihud illiquidity measure
+- Roll spread estimation
+- Market impact functions
+- Price impact curve fitting
+
+### Reinforcement Learning Trading
+- DQN (Deep Q-Network) trading agent
+- Trading environment simulation
+- Experience replay and training
+- Policy optimization for trading
+
+### Alternative Data Analysis
+- Sentiment analysis from text
+- Satellite data correlation
+- Web traffic analysis
+- Social media sentiment
+- Credit card transaction analysis
+- News sentiment analysis
+- Multi-signal combination
+
 ### Technologies
 - Python with pandas, numpy, scipy
 - Machine learning (scikit-learn, PyTorch)
