@@ -296,6 +296,63 @@ This portfolio contains implementations of various quantitative finance concepts
 - Binary (digital) options
 - Chooser options
 
+### Advanced Time Series Models
+- ARIMA models
+- Vector Autoregression (VAR)
+- State space models
+- Cointegrated VAR (VECM)
+- Structural break detection
+
+### Alternative Risk Measures
+- Sortino ratio
+- Omega ratio
+- Calmar ratio
+- Sterling ratio
+- Kappa ratio
+- Gain-to-Pain ratio
+- Ulcer Index
+- Pain Index
+
+### Market Making Strategies
+- Optimal bid-ask spread calculation
+- Inventory risk management
+- Market making P&L analysis
+- Avellaneda-Stoikov model
+- Dynamic spread adjustment
+
+### Yield Curve Models
+- Nelson-Siegel model
+- Svensson model
+- Yield curve interpolation
+- Forward rate curves
+- Yield curve slope analysis
+
+### Volatility Surface Modeling
+- 3D volatility surface interpolation
+- Volatility smile/skew analysis
+- Volatility term structure
+- Stochastic volatility surfaces (Heston)
+
+### Dynamic Correlation Models
+- Rolling correlation
+- DCC-GARCH correlation
+- Regime-dependent correlation
+- Correlation break detection
+- Average correlation matrices
+
+### Factor Timing Strategies
+- Factor momentum timing
+- Factor regime timing
+- Factor rotation strategies
+- Dynamic factor exposure
+
+### High-Frequency Analysis
+- Tick data analysis
+- Order flow imbalance
+- Realized volatility (high-freq)
+- Microstructure noise estimation
+- Volume profile analysis
+
 ### Technologies
 - Python with pandas, numpy, scipy
 - Machine learning (scikit-learn, PyTorch)
