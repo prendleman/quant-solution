@@ -241,6 +241,61 @@ This portfolio contains implementations of various quantitative finance concepts
 - Round-trip cost analysis
 - Implementation shortfall analysis
 
+### Advanced Machine Learning Models
+- LSTM-style sequence prediction
+- Transformer attention mechanisms
+- Ensemble model predictions
+- Feature importance analysis (SHAP-like)
+- Deep factor models
+- Reinforcement learning portfolio optimization
+
+### Walk-Forward Backtesting
+- Walk-forward analysis framework
+- Monte Carlo backtesting
+- Out-of-sample testing
+- Robust performance evaluation
+
+### Tail Risk Analysis
+- Expected Shortfall (Conditional VaR)
+- Tail Value at Risk
+- Maximum drawdown duration
+- Tail expectation metrics
+- Extreme Value Theory (EVT) VaR
+- Tail dependence analysis
+- Tail risk decomposition
+
+### Multi-Asset Strategies
+- Equity-bond rotation
+- Commodity-equity hedging
+- Risk parity multi-asset
+- Tactical asset allocation
+- Currency-hedged portfolios
+- Multi-asset momentum
+
+### Cryptocurrency Models
+- Crypto volatility modeling
+- Liquidity analysis
+- Correlation analysis
+- Bitcoin dominance index
+- Crypto momentum factors
+- Stablecoin peg analysis
+- Fear & greed index
+
+### ESG Integration
+- ESG factor exposure
+- ESG-tilted portfolios
+- ESG risk adjustment
+- Carbon footprint analysis
+- ESG momentum factors
+- ESG risk factor models
+
+### Exotic Derivatives
+- Asian options (arithmetic/geometric)
+- Barrier options (in/out, up/down)
+- Lookback options (floating/fixed)
+- Binary (digital) options
+- Chooser options
+
 ### Technologies
 - Python with pandas, numpy, scipy
 - Machine learning (scikit-learn, PyTorch)
