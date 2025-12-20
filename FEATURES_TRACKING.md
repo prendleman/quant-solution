@@ -299,6 +299,81 @@ This document tracks all features and implementations added to the quant portfol
   - Multi-signal combination
 - **Date Added**: 2025-01-17
 
+### Commodities Models
+- **File**: `models/commodities_models.py`
+- **Features**:
+  - Futures pricing (cost-of-carry model)
+  - Roll yield calculation
+  - Commodities carry trade analysis
+  - Oil spread analysis (WTI-Brent)
+  - Metals basis analysis
+  - Agricultural seasonality
+  - Energy volatility smile
+- **Date Added**: 2025-01-17
+
+### Credit Risk Models
+- **File**: `models/credit_risk_models.py`
+- **Features**:
+  - Probability of Default (PD) estimation
+  - Loss Given Default (LGD)
+  - Exposure at Default (EAD)
+  - Expected and Unexpected Loss
+  - Credit VaR
+  - Merton structural model
+  - Credit migration matrices
+- **Date Added**: 2025-01-17
+
+### Regime Switching Models
+- **File**: `models/regime_switching_models.py`
+- **Features**:
+  - Markov-switching regime detection
+  - Bull/bear market identification
+  - Volatility regime detection
+  - Regime-conditional portfolio optimization
+  - Hidden Markov model states
+- **Date Added**: 2025-01-17
+
+### Kalman Filter
+- **File**: `models/kalman_filter.py`
+- **Features**:
+  - State estimation and filtering
+  - Time-varying volatility estimation
+  - Trend extraction
+  - Dynamic beta estimation
+- **Date Added**: 2025-01-17
+
+### Event-Driven Strategies
+- **File**: `strategies/event_driven_strategies.py`
+- **Features**:
+  - Earnings announcement strategies
+  - Merger arbitrage
+  - Dividend capture strategies
+  - Post-earnings announcement drift (PEAD)
+  - Event momentum signals
+- **Date Added**: 2025-01-17
+
+### Stress Testing
+- **File**: `analysis/stress_testing.py`
+- **Features**:
+  - Historical stress testing
+  - Scenario analysis
+  - Monte Carlo stress tests
+  - Correlation stress tests
+  - Liquidity stress testing
+  - Extreme value analysis
+- **Date Added**: 2025-01-17
+
+### Transaction Cost Analysis
+- **File**: `analysis/transaction_cost_analysis.py`
+- **Features**:
+  - Market impact estimation
+  - Bid-ask spread costs
+  - Total transaction cost calculation
+  - Optimal trade sizing
+  - Round-trip cost analysis
+  - Implementation shortfall analysis
+- **Date Added**: 2025-01-17
+
 ## Portfolio Evolution
 
 This portfolio is continuously improved based on quantitative job market requirements. New features are automatically added to demonstrate the latest quant skills and technologies in demand.
