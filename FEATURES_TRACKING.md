@@ -374,6 +374,89 @@ This document tracks all features and implementations added to the quant portfol
   - Implementation shortfall analysis
 - **Date Added**: 2025-01-17
 
+### Advanced Machine Learning Models
+- **File**: `models/advanced_ml_models.py`
+- **Features**:
+  - LSTM-style sequence prediction
+  - Transformer attention mechanisms
+  - Ensemble model predictions
+  - Feature importance analysis (SHAP-like)
+  - Deep factor models
+  - Reinforcement learning portfolio optimization
+- **Date Added**: 2025-01-17
+
+### Walk-Forward Backtesting
+- **File**: `utils/walk_forward_backtesting.py`
+- **Features**:
+  - Walk-forward analysis framework
+  - Monte Carlo backtesting
+  - Out-of-sample testing
+  - Robust performance evaluation
+- **Date Added**: 2025-01-17
+
+### Tail Risk Analysis
+- **File**: `analysis/tail_risk_analysis.py`
+- **Features**:
+  - Expected Shortfall (Conditional VaR)
+  - Tail Value at Risk
+  - Maximum drawdown duration
+  - Tail expectation metrics
+  - Extreme Value Theory (EVT) VaR
+  - Tail dependence analysis
+  - Tail risk decomposition
+- **Date Added**: 2025-01-17
+
+### Multi-Asset Strategies
+- **File**: `strategies/multi_asset_strategies.py`
+- **Features**:
+  - Equity-bond rotation
+  - Commodity-equity hedging
+  - Risk parity multi-asset
+  - Tactical asset allocation
+  - Currency-hedged portfolios
+  - Multi-asset momentum
+- **Date Added**: 2025-01-17
+
+### Cryptocurrency Models
+- **File**: `models/cryptocurrency_models.py`
+- **Features**:
+  - Crypto volatility modeling
+  - Liquidity analysis
+  - Correlation analysis
+  - Bitcoin dominance index
+  - Crypto momentum factors
+  - Stablecoin peg analysis
+  - Fear & greed index
+- **Date Added**: 2025-01-17
+
+### ESG Integration
+- **File**: `models/esg_integration.py`
+- **Features**:
+  - ESG factor exposure
+  - ESG-tilted portfolios
+  - ESG risk adjustment
+  - Carbon footprint analysis
+  - ESG momentum factors
+  - ESG risk factor models
+- **Date Added**: 2025-01-17
+
+### Exotic Derivatives
+- **File**: `models/exotic_derivatives.py`
+- **Features**:
+  - Asian options (arithmetic/geometric)
+  - Barrier options (in/out, up/down)
+  - Lookback options (floating/fixed)
+  - Binary (digital) options
+  - Chooser options
+- **Date Added**: 2025-01-17
+
+### Enhanced Factor Models
+- **File**: `models/factor_models.py`
+- **Enhancements**:
+  - Independent Component Analysis (ICA)
+  - Factor rotation (varimax/promax)
+- **Date Enhanced**: 2025-01-17
+
 ## Portfolio Evolution
 
 This portfolio is continuously improved based on quantitative job market requirements. New features are automatically added to demonstrate the latest quant skills and technologies in demand.
