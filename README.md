@@ -187,6 +187,60 @@ This portfolio contains implementations of various quantitative finance concepts
 - News sentiment analysis
 - Multi-signal combination
 
+### Commodities Models
+- Futures pricing (cost-of-carry model)
+- Roll yield calculation
+- Commodities carry trade analysis
+- Oil spread analysis (WTI-Brent)
+- Metals basis analysis
+- Agricultural seasonality
+- Energy volatility smile
+
+### Credit Risk Models
+- Probability of Default (PD) estimation
+- Loss Given Default (LGD)
+- Exposure at Default (EAD)
+- Expected and Unexpected Loss
+- Credit VaR
+- Merton structural model
+- Credit migration matrices
+
+### Regime Switching Models
+- Markov-switching regime detection
+- Bull/bear market identification
+- Volatility regime detection
+- Regime-conditional portfolio optimization
+- Hidden Markov model states
+
+### Kalman Filter
+- State estimation and filtering
+- Time-varying volatility estimation
+- Trend extraction
+- Dynamic beta estimation
+
+### Event-Driven Strategies
+- Earnings announcement strategies
+- Merger arbitrage
+- Dividend capture strategies
+- Post-earnings announcement drift (PEAD)
+- Event momentum signals
+
+### Stress Testing
+- Historical stress testing
+- Scenario analysis
+- Monte Carlo stress tests
+- Correlation stress tests
+- Liquidity stress testing
+- Extreme value analysis
+
+### Transaction Cost Analysis
+- Market impact estimation
+- Bid-ask spread costs
+- Total transaction cost calculation
+- Optimal trade sizing
+- Round-trip cost analysis
+- Implementation shortfall analysis
+
 ### Technologies
 - Python with pandas, numpy, scipy
 - Machine learning (scikit-learn, PyTorch)
